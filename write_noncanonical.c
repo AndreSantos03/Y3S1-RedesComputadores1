@@ -10,6 +10,8 @@
 #include <sys/stat.h>
 #include <termios.h>
 #include <unistd.h>
+#include <signal.h>
+
 
 // Baudrate settings are defined in <asm/termbits.h>, which is
 // included by <termios.h>
@@ -28,6 +30,7 @@
 #define BUF_SIZE 256
 
 volatile int STOP = FALSE;
+
 
 int main(int argc, char *argv[])
 {
@@ -122,11 +125,34 @@ int main(int argc, char *argv[])
     uaT[3] = uaT[1] ^ uaT[2];
     uaT[4] = flag;
     
-    int bytes = write(fd, setT, BUF_SIZE);
+    int alarmCountMax = 4;
+    int alarmTimer = 3;
+    int alarmCount = 0;
+    int alarmEnabled = FALSE;
+
+    int bytes_received = 0;
     
+    void alarmHandler(){
+        if(bytes_received != BUF_SIZE){
+            alarmEnabled = FALSE;
+            alarmCount++;
+            int bytes = write(fd, setT,         BUF_SIZE);
+    printf("%d bytes written\n", bytes);
+        }
+        printf("Alarm #%d\n",alarmCount);
+    }
+    
+    int bytes = write(fd, setT,     BUF_SIZE);
     printf("%d bytes written\n", bytes);
     
-    int bytes_received = read(fd,buf,BUF_SIZE);
+    while(alarmCount <4 || bytes_received == BUF_SIZE){
+        (void)signal(SIGALRM, alarmHandler);
+        if(alarmEnabled = FALSE){
+            alarm(3);
+            alarmEnabled = 3;
+        }
+    }
+    bytes_received = read(fd,buf,BUF_SIZE);
     
     if(buf[1] == uaT[1] && buf[2] == uaT[2]) {
         printf("received successfully!");
