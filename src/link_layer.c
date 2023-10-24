@@ -56,7 +56,7 @@ void alarmHandler(int signal)
     alarmEnabled = FALSE;
     alarmCount++;
 
-    printf("time-out %d\n", alarmCount);
+    printf("Timeout number: %d\n", alarmCount);
     return;
 }
 
@@ -65,13 +65,11 @@ void alarmHandler(int signal)
 ////////////////////////////////////////////////
 int llopen(LinkLayer connectionParameters)
 {
-    printf("START LLOPEN ---------------------------------------\n");
+    printf("-------llopen started-------");
 
-    // save connectionParameters for later usage
     connection_parameters = connectionParameters;
 
-    // Open serial port device for reading and writing, and not as controlling tty
-    // because we don't want to get killed if linenoise sends CTRL-C.
+    // Open serial port device for reading and writing
     fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
 
     if (fd < 0)
@@ -115,169 +113,157 @@ int llopen(LinkLayer connectionParameters)
         perror("tcsetattr");
         exit(-1);
     }
-
     printf("New termios structure set\n");
 
-    // SEND/RECEIVE MESSAGES
-    switch (connectionParameters.role)
-    {
-    // TRANSMITTER
-    case LlTx:
+    //transmitter
+    if(connectionParameters.role == LlTx){
+
+        //Create the Set Message
+        unsigned char setMessage[BUF_SIZE];
+        setMessage[0] = FLAG;
+        setMessage[1] = A_SET;
+        setMessage[2] = C_SET;
+        setMessage[3] = BCC_SET;
+        setMessage[4] = FLAG;
+
+        // Set alarm function handler
+        (void)signal(SIGALRM, alarmHandler);
+
+        // while loop for the ammount of times it tries to send message
+        while (alarmCount <= connectionParameters.nRetransmissions)
         {
-            // CREATE SET MESSAGE
-            unsigned char set_message[BUF_SIZE];
-            set_message[0] = FLAG;
-            set_message[1] = A_SET;
-            set_message[2] = C_SET;
-            set_message[3] = BCC_SET;
-            set_message[4] = FLAG;
+            // sends the Set Messag
+            int bytes = write(fd, setMessage, 5);
+            printf("Sent Set Message with %d bytes being written\n", bytes);
 
-            // Set alarm function handler
-            (void)signal(SIGALRM, alarmHandler);
-
-            // sends message at most 3 times
-            while (alarmCount <= connectionParameters.nRetransmissions)
+            // salarm setter
+            if (alarmEnabled == FALSE)
             {
-                // SEND SET MESSAGE
-                int bytes = write(fd, set_message, 5);
-                printf("SET MESSAGE SENT - %d bytes written\n", bytes);
+                alarm(connectionParameters.timeout); // alarm trigger
+                alarmEnabled = TRUE;
+            }
 
-                // sets alarm of 3 seconds
-                if (alarmEnabled == FALSE)
-                {
-                    alarm(connectionParameters.timeout); // Set alarm to be triggered in 3s
-                    alarmEnabled = TRUE;
-                }
-
-                // READ UA MESSAGE
-                unsigned char buf[BUF_SIZE];
-                int i = 0;
-                int STATE = 0;
-                while (STATE != 5)
-                {
-                    int bytes = read(fd, buf + i, 1);
-                    //printf("%hx %d\n", buf[i], bytes);
-                    if (bytes == -1) break;
-                    if (bytes > 0) {
-                        // STATE MACHINE
-                        switch (STATE)
-                        {
+            // reads back the Ua Message
+            unsigned char buf[BUF_SIZE];
+            int counter = 0;
+            while (counter != 5)
+            {
+                int bytes = read(fd, buf + counter, 1);
+                if (bytes == -1){
+                    break;
+                    }
+                if (bytes > 0) {
+                    //state machine
+                    switch (counter){
                         case 0:
-                            if (buf[i] == FLAG) STATE = 1;
-                            break;
+                            if (buf[counter] == FLAG) 
+                            counter = 1;
+                            break;   
                         case 1:
-                            if (buf[i] == FLAG) STATE = 1;
-                            if (buf[i] == A_UA) STATE = 2;
-                            else STATE = 0;
+                            if (buf[counter] == FLAG) counter = 1;
+                            if (buf[counter] == A_UA) counter = 2;
+                            else counter = 0;
                             break;
                         case 2:
-                            if (buf[i] == FLAG) STATE = 1;
-                            if (buf[i] == C_UA) STATE = 3;
-                            else STATE = 0;
+                            if (buf[counter] == FLAG) counter = 1;
+                            if (buf[counter] == C_UA) counter = 3;
+                            else counter = 0;
                             break;
                         case 3:
-                            if (buf[i] == FLAG) STATE = 1;
-                            if (buf[i] == BCC_UA) STATE = 4;
+                            if (buf[counter] == FLAG) counter = 1;
+                            if (buf[counter] == BCC_UA) counter = 4;
                             else {
-                                printf("error in the protocol\n");
-                                STATE = 0;
+                                printf("bcc doesn't match\n");
+                                counter = 0;
                             }
                             break;
                         case 4:
-                            if (buf[i] == FLAG) STATE = 5;
-                            else STATE = 0;
+                            if (buf[counter] == FLAG) counter = 5;
+                            else counter = 0;
                             break;
                         
                         default:
                             break;
-                        }
-                        i++; 
                     }
-                    // timeout
-                    if (alarmEnabled == FALSE) break;
                 }
-                
-                // RECEIVED UA MESSAGE
-                if (STATE == 5) {
-                    alarmCount = 0;
-                    printf("UA RECEIVED\n");
-                    break;
-                }
+                // timeout
+                if (alarmEnabled == FALSE) break;
+            }
+            
+            // received ua message
+            if (counter == 5) {
+                alarmCount = 0;
+                printf("Ua Message was received\n");
+                break;
             }
         }
-        break;
-    // RECEIVER
-    case LlRx:
+    }
+
+    //receiver
+    else if(connectionParameters.role == LlRx){
+        //reads the Set Message
+        unsigned char buf[BUF_SIZE];
+        int counter = 0;
+        while (counter != 5)
         {
-            // READ SET MESSAGE
-            unsigned char buf[BUF_SIZE];
-            int i = 0;
-            int STATE = 0;
-            while (STATE != 5)
-            {
-                int bytes = read(fd, buf + i, 1);
-                //printf("%hx %d\n", buf[i], STATE);
-                if (bytes > 0) {
-                    // STATE MACHINE
-                    switch (STATE)
-                    {
+            int bytes = read(fd, buf + counter, 1);
+            if (bytes > 0) {
+                // State Machine
+                switch (counter){
                     case 0:
-                        if (buf[i] == FLAG) STATE = 1;
+                        if (buf[counter] == FLAG) counter = 1;
                         break;
                     case 1:
-                        if (buf[i] == A_SET) STATE = 2;
-                        else STATE = 0;
+                        if (buf[counter] == A_SET) counter = 2;
+                        else counter = 0;
                         break;
                     case 2:
-                        if (buf[i] == FLAG) STATE = 1;
-                        if (buf[i] == C_SET) STATE = 3;
-                        else STATE = 0;
+                        if (buf[counter] == FLAG) counter = 1;
+                        if (buf[counter] == C_SET) counter = 3;
+                        else counter = 0;
                         break;
                     case 3:
-                        if (buf[i] == FLAG) STATE = 1;
-                        if (buf[i] == BCC_SET) STATE = 4;
+                        if (buf[counter] == FLAG) counter = 1;
+                        if (buf[counter] == BCC_SET) counter = 4;
                         else {
                             printf("error in the protocol\n");
-                            STATE = 0;
+                            counter = 0;
                         }
                         break;
                     case 4:
-                        if (buf[i] == FLAG) STATE = 5;
-                        else STATE = 0;
+                        if (buf[counter] == FLAG) counter = 5;
+                        else counter = 0;
                         break;
                     
                     default:
                         break;
-                    }
-                    i++; 
                 }
             }
-            printf("SET RECEIVED\n");
-
-            // SEND UA MESSAGE
-            unsigned char ua_message[BUF_SIZE];
-            ua_message[0] = FLAG;
-            ua_message[1] = A_UA;
-            ua_message[2] = C_UA;
-            ua_message[3] = BCC_UA;
-            ua_message[4] = FLAG;
-
-            int bytes = write(fd, ua_message, 5);
-            printf("UA MESSAGE SENT - %d bytes written\n", bytes);
         }
-        break;
-    default:
-        break;
-    }
-    printf("FINISHED LLOPEN ---------------------------------------\n");
+        printf("SET RECEIVED\n");
 
-    // TIMEOUT ERROR
+        // Screates the Ua Message
+        unsigned char ua_message[BUF_SIZE];
+        ua_message[0] = FLAG;
+        ua_message[1] = A_UA;
+        ua_message[2] = C_UA;
+        ua_message[3] = BCC_UA;
+        ua_message[4] = FLAG;
+
+        //sends the Ua Message
+        int bytes = write(fd, ua_message, 5);
+        printf("Sent UA Message with %d bytes being written\n", bytes);
+    }
+    printf("-------llopen finished-------\n");
+
+    //timed out
     if (alarmCount > connection_parameters.nRetransmissions) {
+        printf("Time out number was exceded");
         alarmCount = 0;
         return -1;
     }
 
-    // SUCCESSFUL
+    //all worked well!
     return 1;
 }
 
@@ -286,7 +272,7 @@ int llopen(LinkLayer connectionParameters)
 ////////////////////////////////////////////////
 int llwrite(const unsigned char *buf, int bufSize)
 {
-    printf("START LLWRITE ---------------------------------------\n");
+    printf("S-------llwrite started-------\n");
     printf("Sending trama %d\n", !trama_0);
 
     // GENERATE BCC2
@@ -451,7 +437,7 @@ int llwrite(const unsigned char *buf, int bufSize)
         previous_trama[i] = packet_to_send[i];
     }
 
-    printf("FINISHED LLWRITE ---------------------------------------\n");
+    printf("-------llwrite finished-------\n");
 
     // TIMEOUT ERROR
     if (alarmCount > connection_parameters.nRetransmissions) {
@@ -468,7 +454,7 @@ int llwrite(const unsigned char *buf, int bufSize)
 ////////////////////////////////////////////////
 int llread(unsigned char *packet)
 {
-    printf("START LLREAD ---------------------------------------\n");
+    printf("-------llread started-------\n");
     printf("Receiving trama %d\n", !trama_0);
 
     // READ INFORMATION PACKET
@@ -571,7 +557,7 @@ int llread(unsigned char *packet)
         int bytes = write(fd, rr_message, 5);
         printf("REJ MESSAGE SENT - %d bytes written\n", bytes);
 
-        printf("FINISHED LLREAD ---------------------------------------\n");
+        printf("-------llread finished-------\n");
         return -1;
     }
     if (trama_0 == TRUE) {
@@ -619,7 +605,7 @@ int llread(unsigned char *packet)
 ////////////////////////////////////////////////
 int llclose(LinkLayer connectionParameters)
 {
-    printf("START LLCLOSE ---------------------------------------\n");
+    printf("-------llclose started-------\n\n");
 
 
     // SEND/RECEIVE MESSAGES
@@ -840,7 +826,7 @@ int llclose(LinkLayer connectionParameters)
 
     close(fd);
 
-    printf("FINISHED LLCLOSE ---------------------------------------\n");
+    printf("-------llclose finished-------\n");
 
     return 1;
 }
