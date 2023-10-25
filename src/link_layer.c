@@ -59,10 +59,10 @@ void alarmHandler(int signal)
     printf("Timeout number: %d\n", alarmCount);
     return;
 }
-
-////////////////////////////////////////////////
+// ======================
 // LLOPEN
-////////////////////////////////////////////////
+// ======================
+
 int llopen(LinkLayer connectionParameters)
 {
     printf("-------llopen started-------");
@@ -272,9 +272,12 @@ int llopen(LinkLayer connectionParameters)
     return 1;
 }
 
-////////////////////////////////////////////////
+
+
+// ======================
 // LLWRITE
-////////////////////////////////////////////////
+// ======================
+
 int llwrite(const unsigned char *buf, int bufSize)
 {
     printf("-------llwrite started-------\n");
@@ -470,64 +473,92 @@ int llwrite(const unsigned char *buf, int bufSize)
     return sizeof(packetSend);
 }
 
-////////////////////////////////////////////////
-// LLREAD
-////////////////////////////////////////////////
+
+
+
+
+
+// ======================
+//LLREAD
+// ======================
+
 int llread(unsigned char *packet)
 {
     printf("-------llread started-------\n");
-    printf("Receiving trama %d\n", !tramaType);
+    printf("Receiving trama of type: %d!\n", !tramaType);
 
-    // READ INFORMATION PACKET
     unsigned char buf[BUF_SIZE];
-    int i = 0, size_of_buf = 0, error = FALSE;
-    int STATE = 0;
-    while (STATE != 5)
-    {
+    int sizeBuf = 0;
+    int errorTramaType = FALSE;
+    //to keep track of which buf to read
+    int i = 0;
+    //keeps track of state
+    int counter = 0;
+    while (counter != 5){
+
         int bytes = read(fd, buf + i, 1);
-        //printf("%hx %d\n", buf[i], STATE);
+
         if (bytes > 0) {
-            // STATE MACHINE
-            switch (STATE)
+            //State Machine
+            switch (counter)
             {
             case 0:
-                if (buf[i] == FLAG) STATE = 1;
+                if (buf[i] == FLAG){
+                    counter = 1;
+                }
                 break;
             case 1:
-                if (buf[i] == A_SET) STATE = 2;
-                else STATE = 0;
+                if (buf[i] == A_SET) {
+                    counter = 2;
+                }
+                else {
+                    counter = 0;
+                }
                 break;
             case 2:
-                if (buf[i] == FLAG) STATE = 1;
-                if (tramaType == TRUE && buf[i] == C_0) STATE = 3;
-                else if (tramaType == FALSE && buf[i] == C_1) STATE = 3;
-                // trama 1 not expected
+                if (buf[i] == FLAG) {
+                    counter = 1;
+                }
+                if (tramaType == TRUE && buf[i] == C_0) {
+                    counter = 3;
+                }
+                else if (tramaType == FALSE && buf[i] == C_1) {
+                    counter = 3;
+                }
+
+                // wrong typpe of trauma
                 else if (tramaType == TRUE && buf[i] == C_1) {
-                    STATE = 5;
-                    error = TRUE;
+                    counter = 5;
+                    errorTramaType = TRUE;
                 }
-                // trama 0 not expected
                 else if (tramaType == TRUE && buf[i] == C_0) {
-                    STATE = 5;
-                    error = TRUE;
+                    counter = 5;
+                    errorTramaType = TRUE;
                 }
-                else STATE = 0;
+
+                else {
+                    counter = 0;
+                }
                 break;
             case 3:
-                if (buf[i] == FLAG) STATE = 1;
+                if (buf[i] == FLAG) {
+                    counter = 1;
+                }
                 if (buf[i] == (buf[i-1] ^ buf[i-2])) {
-                    STATE = 4;
+                    counter = 4;
                     i = -1;
                 }
                 else {
-                    STATE = 0;
-                    printf("error in the protocol\n");
+                    counter = 0;
+                    printf("error in the bcc checking\n");
                 }
                 break;
             case 4:
-                if (buf[i] == FLAG) STATE = 5;
+                if (buf[i] == FLAG) {
+                    counter = 5;
+                }
                 else {
-                    size_of_buf++;
+                    sizeBuf++;
                 }
                 break;
             
@@ -538,199 +569,144 @@ int llread(unsigned char *packet)
         }
     }
 
-    // BYTE DESTUFFING 
-    int size_of_packet = size_of_buf;
-    for (int i = 0, j = 0; i < size_of_buf; i++, j++) {
-        if (buf[i] == 0x7D && buf[i+1] == 0x5E) {
-            packet[j] = 0x7E;
-            i++; size_of_packet--;
+    // byte destuffing
+    int size_of_packet = sizeBuf;
+    for (int originalSize = 0, destuffedSize = 0; originalSize < sizeBuf; originalSize++, destuffedSize++) {
+        if (buf[originalSize] == 0x7D && buf[originalSize+1] == 0x5E) {
+            packet[destuffedSize] = 0x7E;
+            originalSize++; size_of_packet--;
         }
-        else if (buf[i] == 0x7D && buf[i+1] == 0x5D) {
-            packet[j] = 0x7D;
-            i++; size_of_packet--;
+        else if (buf[originalSize] == 0x7D && buf[originalSize+1] == 0x5D) {
+            packet[destuffedSize] = 0x7D;
+            originalSize++; size_of_packet--;
         }
         else {
-            packet[j] = buf[i];
+            packet[destuffedSize] = buf[originalSize];
         }
     }
 
-    // CHECK BCC2
+    // checks if bcc2 is working correctly
     size_of_packet--;
     unsigned char BCC2 = packet[0];
     for (int i = 1; i < size_of_packet; i++) {
-        BCC2 ^= packet[i];
+        BCC2 = BCC2 ^ packet[i];
     }
 
-    printf("PACKET RECEIVED\n");
+    printf("Packet was received\n");
 
-    // CREATE RR MESSAGE
-    unsigned char rr_message[5];
-    rr_message[0] = FLAG;
-    rr_message[1] = A_UA;
-    // BCC ERROR 
+    // creates the RR message
+    unsigned char rrMessage[5];
+    rrMessage[0] = FLAG;
+    rrMessage[1] = A_UA;
+
+    // checks for bcc2 error
     if (BCC2 != packet[size_of_packet]) {
-        printf("error in the data\n");
-        // SEND REJ
-        rr_message[2] = C_REJ;
-        rr_message[3] = rr_message[1] ^ rr_message[2];
-        rr_message[4] = FLAG;
+        printf("error bcc2\n");
 
-        int bytes = write(fd, rr_message, 5);
-        printf("REJ MESSAGE SENT - %d bytes written\n", bytes);
+        rrMessage[2] = C_REJ;
+        rrMessage[3] = rrMessage[1] ^ rrMessage[2];
+        rrMessage[4] = FLAG;
+        int bytes = write(fd, rrMessage, 5);
+        printf("REJ reject message was sent written with %d bytes\n", bytes);
 
         printf("-------llread finished-------\n");
         return -1;
     }
-    if (tramaType == TRUE) {
-        // DUPLICATED FRAME
-        if (error) {
-            rr_message[2] = C_RR0;
-            printf("duplicate frame \n");
+
+
+    /* if (tramaType == TRUE) {
+        // same frame twice
+        if (errorTramaType) {
+            rrMessage[2] = C_RR0;
+            printf("same frame twice\n");
         }
-        // NO ERROR
         else {
-            rr_message[2] = C_RR1;
+            rrMessage[2] = C_RR1;
             tramaType = FALSE;
         }
     }
     else {
-        // DUPLICATED FRAME
-        if (error) {
-            rr_message[2] = C_RR1;
+        // same frame twice
+        if (errorTramaType) {
+            rrMessage[2] = C_RR1;
             printf("duplicate frame \n");
         }
         // NO ERROR
         else {
-            rr_message[2] = C_RR0;
+            rrMessage[2] = C_RR0;
+            tramaType = TRUE;
+        }
+    } */
+
+    if (errorTramaType) {
+        if (tramaType == TRUE) {
+            rrMessage[2] = C_RR0;
+            printf("same frame twice\n");
+        } else {
+            rrMessage[2] = C_RR1;
+            printf("duplicate frame\n");
+        }
+    } else {
+        if (tramaType == TRUE) {
+            rrMessage[2] = C_RR1;
+            printf("duplicate frame\n");
+        } else {
+            rrMessage[2] = C_RR0;
             tramaType = TRUE;
         }
     }
-    rr_message[3] = rr_message[1] ^ rr_message[2];
-    rr_message[4] = FLAG;
+    rrMessage[3] = rrMessage[1] ^ rrMessage[2];
+    rrMessage[4] = FLAG;
 
-    // SEND RR MESSAGE
-    int bytes = write(fd, rr_message, 5);
-    printf("RR MESSAGE SENT - %d bytes written\n", bytes);
+    // sends the rr message
+    int bytes = write(fd, rrMessage, 5);
+    printf("Sending RR message, writes %d bytes\n", bytes);
 
-    printf("FINNISHED LLREAD ---------------------------------------\n");
+    printf("-------llread finished-------\n");
 
-    // ERROR DUPLICATED TRAMA RECEIVED
-    if (error) return -1;
+    // same trama twice error
+    if (errorTramaType) return -1;
 
-    // SUCCESSFUL
+    // works!
     return size_of_packet;
 }
 
-////////////////////////////////////////////////
+// ======================
 // LLCLOSE
-////////////////////////////////////////////////
+// ======================
+
 int llclose(LinkLayer connectionParameters)
 {
     printf("-------llclose started-------\n\n");
 
 
-    // SEND/RECEIVE MESSAGES
-    switch (connectionParameters.role)
-    {
-    // TRANSMITTER
-    case LlTx:
+    // transmitter
+    if (connectionParameters.role == LlTx){
+        // CREATE DISC MESSAGE
+        unsigned char disc_message[BUF_SIZE];
+        disc_message[0] = FLAG;
+        disc_message[1] = A_SET;
+        disc_message[2] = C_DISC;
+        disc_message[3] = (A_SET ^ C_DISC);
+        disc_message[4] = FLAG;
+
+        // Set alarm function handler
+        (void)signal(SIGALRM, alarmHandler);
+
+        // sends message at most 3 times
+        while (alarmCount <= connectionParameters.nRetransmissions)
         {
-            // CREATE DISC MESSAGE
-            unsigned char disc_message[BUF_SIZE];
-            disc_message[0] = FLAG;
-            disc_message[1] = A_SET;
-            disc_message[2] = C_DISC;
-            disc_message[3] = (A_SET ^ C_DISC);
-            disc_message[4] = FLAG;
+            // SEND DISC MESSAGE
+            int bytes = write(fd, disc_message, 5);
+            printf("DISC MESSAGE SENT - %d bytes written\n", bytes);
 
-            // Set alarm function handler
-            (void)signal(SIGALRM, alarmHandler);
-
-            // sends message at most 3 times
-            while (alarmCount <= connectionParameters.nRetransmissions)
+            // sets alarm of 3 seconds
+            if (alarmEnabled == FALSE)
             {
-                // SEND DISC MESSAGE
-                int bytes = write(fd, disc_message, 5);
-                printf("DISC MESSAGE SENT - %d bytes written\n", bytes);
-
-                // sets alarm of 3 seconds
-                if (alarmEnabled == FALSE)
-                {
-                    alarm(connectionParameters.timeout); // Set alarm to be triggered in 3s
-                    alarmEnabled = TRUE;
-                }
-
-                // READ DISC MESSAGE
-                unsigned char buf[BUF_SIZE];
-                int i = 0;
-                int STATE = 0;
-                while (STATE != 5)
-                {
-                    int bytes = read(fd, buf + i, 1);
-                    //printf("%hx %d\n", buf[i], bytes);
-                    if (bytes == -1) break;
-                    if (bytes > 0) {
-                        // STATE MACHINE
-                        switch (STATE)
-                        {
-                        case 0:
-                            if (buf[i] == FLAG) STATE = 1;
-                            break;
-                        case 1:
-                            if (buf[i] == FLAG) STATE = 1;
-                            if (buf[i] == A_UA) STATE = 2;
-                            else STATE = 0;
-                            break;
-                        case 2:
-                            if (buf[i] == FLAG) STATE = 1;
-                            if (buf[i] == C_DISC) STATE = 3;
-                            else STATE = 0;
-                            break;
-                        case 3:
-                            if (buf[i] == FLAG) STATE = 1;
-                            if (buf[i] == (A_UA ^ C_DISC)) STATE = 4;
-                            else {
-                                printf("error in the protocol\n");
-                                STATE = 0;
-                            }
-                            break;
-                        case 4:
-                            if (buf[i] == FLAG) STATE = 5;
-                            else STATE = 0;
-                            break;
-                        
-                        default:
-                            break;
-                        }
-                        i++; 
-                    }
-                    // timeout
-                    if (alarmEnabled == FALSE) break;
-                }
-                
-                // RECEIVED DISC MESSAGE
-                if (STATE == 5) {
-                    alarmCount = 0;
-                    printf("DISC RECEIVED\n");
-                    break;
-                }
+                alarm(connectionParameters.timeout); // Set alarm to be triggered in 3s
+                alarmEnabled = TRUE;
             }
 
-            // SEND UA MESSAGE
-            unsigned char ua_message[BUF_SIZE];
-            ua_message[0] = FLAG;
-            ua_message[1] = A_UA;
-            ua_message[2] = C_UA;
-            ua_message[3] = BCC_UA;
-            ua_message[4] = FLAG;
-
-            int bytes = write(fd, ua_message, 5);
-            printf("UA MESSAGE SENT - %d bytes written\n", bytes);
-        }
-        break;
-    // RECEIVER
-    case LlRx:
-        {
             // READ DISC MESSAGE
             unsigned char buf[BUF_SIZE];
             int i = 0;
@@ -738,67 +714,11 @@ int llclose(LinkLayer connectionParameters)
             while (STATE != 5)
             {
                 int bytes = read(fd, buf + i, 1);
-                //printf("%hx %d\n", buf[i], STATE);
-                if (bytes > 0) {
-                    // STATE MACHINE
-                    switch (STATE)
-                    {
-                    case 0:
-                        if (buf[i] == FLAG) STATE = 1;
-                        break;
-                    case 1:
-                        if (buf[i] == A_SET) STATE = 2;
-                        else STATE = 0;
-                        break;
-                    case 2:
-                        if (buf[i] == FLAG) STATE = 1;
-                        if (buf[i] == C_DISC) STATE = 3;
-                        else STATE = 0;
-                        break;
-                    case 3:
-                        if (buf[i] == FLAG) STATE = 1;
-                        if (buf[i] == (A_SET ^ C_DISC)) STATE = 4;
-                        else {
-                            printf("error in the protocol\n");
-                            STATE = 0;
-                        }
-                        break;
-                    case 4:
-                        if (buf[i] == FLAG) STATE = 5;
-                        else STATE = 0;
-                        break;
-                    
-                    default:
-                        break;
-                    }
-                    i++; 
-                }
-            }
-            printf("DISC RECEIVED\n");
-
-            // SEND DISC MESSAGE
-            unsigned char disc_message[BUF_SIZE];
-            disc_message[0] = FLAG;
-            disc_message[1] = A_UA;
-            disc_message[2] = C_DISC;
-            disc_message[3] = (A_UA ^ C_DISC);
-            disc_message[4] = FLAG;
-
-            int bytes = write(fd, disc_message, 5);
-            printf("DISC MESSAGE SENT - %d bytes written\n", bytes);
-
-            // READ UA MESSAGE
-            i = 0;
-            STATE = 0;
-            while (STATE != 5)
-            {
-                int bytes = read(fd, buf + i, 1);
                 //printf("%hx %d\n", buf[i], bytes);
                 if (bytes == -1) break;
                 if (bytes > 0) {
                     // STATE MACHINE
-                    switch (STATE)
-                    {
+                    switch (STATE){
                     case 0:
                         if (buf[i] == FLAG) STATE = 1;
                         break;
@@ -809,12 +729,12 @@ int llclose(LinkLayer connectionParameters)
                         break;
                     case 2:
                         if (buf[i] == FLAG) STATE = 1;
-                        if (buf[i] == C_UA) STATE = 3;
+                        if (buf[i] == C_DISC) STATE = 3;
                         else STATE = 0;
                         break;
                     case 3:
                         if (buf[i] == FLAG) STATE = 1;
-                        if (buf[i] == BCC_UA) STATE = 4;
+                        if (buf[i] == (A_UA ^ C_DISC)) STATE = 4;
                         else {
                             printf("error in the protocol\n");
                             STATE = 0;
@@ -830,12 +750,137 @@ int llclose(LinkLayer connectionParameters)
                     }
                     i++; 
                 }
+                // timeout
+                if (alarmEnabled == FALSE) break;
             }
-            printf("UA RECEIVED\n");
+            
+            // RECEIVED DISC MESSAGE
+            if (STATE == 5) {
+                alarmCount = 0;
+                printf("DISC RECEIVED\n");
+                break;
+            }
         }
-        break;
-    default:
-        break;
+
+        // SEND UA MESSAGE
+        unsigned char ua_message[BUF_SIZE];
+        ua_message[0] = FLAG;
+        ua_message[1] = A_UA;
+        ua_message[2] = C_UA;
+        ua_message[3] = BCC_UA;
+        ua_message[4] = FLAG;
+
+        int bytes = write(fd, ua_message, 5);
+        printf("UA MESSAGE SENT - %d bytes written\n", bytes);
+    }
+
+
+    // RECEIVER
+    else if(connectionParameters.role == LlRx){
+        // READ DISC MESSAGE
+        unsigned char buf[BUF_SIZE];
+        int i = 0;
+        int STATE = 0;
+        while (STATE != 5)
+        {
+            int bytes = read(fd, buf + i, 1);
+            //printf("%hx %d\n", buf[i], STATE);
+            if (bytes > 0) {
+                // STATE MACHINE
+                switch (STATE)
+                {
+                case 0:
+                    if (buf[i] == FLAG) STATE = 1;
+                    break;
+                case 1:
+                    if (buf[i] == A_SET) STATE = 2;
+                    else STATE = 0;
+                    break;
+                case 2:
+                    if (buf[i] == FLAG) STATE = 1;
+                    if (buf[i] == C_DISC) STATE = 3;
+                    else STATE = 0;
+                    break;
+                case 3:
+                    if (buf[i] == FLAG) STATE = 1;
+                    if (buf[i] == (A_SET ^ C_DISC)) STATE = 4;
+                    else {
+                        printf("error in the protocol\n");
+                        STATE = 0;
+                    }
+                    break;
+                case 4:
+                    if (buf[i] == FLAG) STATE = 5;
+                    else STATE = 0;
+                    break;
+                
+                default:
+                    break;
+                }
+                i++; 
+            }
+        }
+        printf("DISC RECEIVED\n");
+
+        // SEND DISC MESSAGE
+        unsigned char disc_message[BUF_SIZE];
+        disc_message[0] = FLAG;
+        disc_message[1] = A_UA;
+        disc_message[2] = C_DISC;
+        disc_message[3] = (A_UA ^ C_DISC);
+        disc_message[4] = FLAG;
+
+        int bytes = write(fd, disc_message, 5);
+        printf("DISC MESSAGE SENT - %d bytes written\n", bytes);
+
+        // READ UA MESSAGE
+        i = 0;
+        STATE = 0;
+        while (STATE != 5)
+        {
+            int bytes = read(fd, buf + i, 1);
+            //printf("%hx %d\n", buf[i], bytes);
+            if (bytes == -1) break;
+            if (bytes > 0) {
+                // STATE MACHINE
+                switch (STATE)
+                {
+                case 0:
+                    if (buf[i] == FLAG) STATE = 1;
+                    break;
+                case 1:
+                    if (buf[i] == FLAG) STATE = 1;
+                    if (buf[i] == A_UA) STATE = 2;
+                    else STATE = 0;
+                    break;
+                case 2:
+                    if (buf[i] == FLAG) STATE = 1;
+                    if (buf[i] == C_UA) STATE = 3;
+                    else STATE = 0;
+                    break;
+                case 3:
+                    if (buf[i] == FLAG) STATE = 1;
+                    if (buf[i] == BCC_UA) STATE = 4;
+                    else {
+                        printf("error in the protocol\n");
+                        STATE = 0;
+                    }
+                    break;
+                case 4:
+                    if (buf[i] == FLAG) STATE = 5;
+                    else STATE = 0;
+                    break;
+                
+                default:
+                    break;
+                }
+                i++; 
+            }
+        }
+        printf("UA RECEIVED\n");
+    }
+    else{
+        printf("neither transmitter nor receiver!");
     }
 
     // Restore the old port settings
