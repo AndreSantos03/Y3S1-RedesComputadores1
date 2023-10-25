@@ -44,7 +44,7 @@ struct termios newtio;
 int fd;
 int alarmEnabled = FALSE;
 int alarmCount = 0;
-int trama_0 = TRUE;
+int tramaType = TRUE;
 unsigned char previous_trama[BUF_SIZE];
 
 LinkLayer connection_parameters; 
@@ -272,21 +272,33 @@ int llopen(LinkLayer connectionParameters)
 ////////////////////////////////////////////////
 int llwrite(const unsigned char *buf, int bufSize)
 {
-    printf("S-------llwrite started-------\n");
-    printf("Sending trama %d\n", !trama_0);
+    printf("-------llwrite started-------\n");
+    printf("Sending trama  of type %d\n", !tramaType);
 
-    // GENERATE BCC2
+    /* // GENERATE BCC2
     unsigned char BCC2 = buf[0];
     for (int i = 1; i < bufSize; i++) {
         BCC2 ^= buf[i];
     }
+ */
 
-    // BYTE STUFFING 
+    //initializes BCC2 to 0
+    unsigned char BCC2 = 0; 
+
+    // bitwise XOR with the next byte in buf
+    for (int i = 0; i < bufSize; i++) {
+        BCC2 = BCC2 ^ buf[i]; 
+    }
+
+    // byte stuffing, we're finding out how many times the escape character is found!
     int counter = 0;
     for (int i = 0; i < bufSize; i++) {
-        // find out how many 0x7E or 0x7D are present in buf
-        if (buf[i] == 0x7E || buf[i] == 0x7D) counter++;
+        if (buf[i] == 0x7E || buf[i] == 0x7D) {
+            counter++;
+        }
     }
+
+
     // check bcc2
     if (BCC2 == 0x7E || BCC2 == 0x7D) counter++;
     unsigned char buf_after_byte_stuffing[bufSize+counter];
@@ -312,7 +324,7 @@ int llwrite(const unsigned char *buf, int bufSize)
     unsigned char packet_to_send[bufSize+counter+6];
     packet_to_send[0] = FLAG;
     packet_to_send[1] = A_SET;
-    switch (trama_0)
+    switch (tramaType)
     {
     case TRUE:
         packet_to_send[2] = C_0;
@@ -346,8 +358,8 @@ int llwrite(const unsigned char *buf, int bufSize)
     }
 
     // next trama to send
-    if (trama_0 == TRUE) trama_0 = FALSE;
-    else trama_0 = TRUE;
+    if (tramaType == TRUE) tramaType = FALSE;
+    else tramaType = TRUE;
 
     // SEND INFORMATION MESSAGE
     // Set alarm function handler
@@ -395,8 +407,8 @@ int llwrite(const unsigned char *buf, int bufSize)
                         printf("REJ received\n");
                         break;
                     }
-                    if (trama_0 == TRUE && response[i] == C_RR0) STATE = 3;
-                    else if (trama_0 == FALSE && response[i] == C_RR1) STATE = 3;
+                    if (tramaType == TRUE && response[i] == C_RR0) STATE = 3;
+                    else if (tramaType == FALSE && response[i] == C_RR1) STATE = 3;
                     else {
                         // SEND PREVIOUS TRAMA
                         // SEND INFORMATION PACKET
@@ -455,7 +467,7 @@ int llwrite(const unsigned char *buf, int bufSize)
 int llread(unsigned char *packet)
 {
     printf("-------llread started-------\n");
-    printf("Receiving trama %d\n", !trama_0);
+    printf("Receiving trama %d\n", !tramaType);
 
     // READ INFORMATION PACKET
     unsigned char buf[BUF_SIZE];
@@ -478,15 +490,15 @@ int llread(unsigned char *packet)
                 break;
             case 2:
                 if (buf[i] == FLAG) STATE = 1;
-                if (trama_0 == TRUE && buf[i] == C_0) STATE = 3;
-                else if (trama_0 == FALSE && buf[i] == C_1) STATE = 3;
+                if (tramaType == TRUE && buf[i] == C_0) STATE = 3;
+                else if (tramaType == FALSE && buf[i] == C_1) STATE = 3;
                 // trama 1 not expected
-                else if (trama_0 == TRUE && buf[i] == C_1) {
+                else if (tramaType == TRUE && buf[i] == C_1) {
                     STATE = 5;
                     error = TRUE;
                 }
                 // trama 0 not expected
-                else if (trama_0 == TRUE && buf[i] == C_0) {
+                else if (tramaType == TRUE && buf[i] == C_0) {
                     STATE = 5;
                     error = TRUE;
                 }
@@ -560,7 +572,7 @@ int llread(unsigned char *packet)
         printf("-------llread finished-------\n");
         return -1;
     }
-    if (trama_0 == TRUE) {
+    if (tramaType == TRUE) {
         // DUPLICATED FRAME
         if (error) {
             rr_message[2] = C_RR0;
@@ -569,7 +581,7 @@ int llread(unsigned char *packet)
         // NO ERROR
         else {
             rr_message[2] = C_RR1;
-            trama_0 = FALSE;
+            tramaType = FALSE;
         }
     }
     else {
@@ -581,7 +593,7 @@ int llread(unsigned char *packet)
         // NO ERROR
         else {
             rr_message[2] = C_RR0;
-            trama_0 = TRUE;
+            tramaType = TRUE;
         }
     }
     rr_message[3] = rr_message[1] ^ rr_message[2];
