@@ -45,7 +45,7 @@ int fd;
 int alarmEnabled = FALSE;
 int alarmCount = 0;
 int tramaType = TRUE;
-unsigned char previous_trama[BUF_SIZE];
+unsigned char previousTrama[BUF_SIZE];
 
 LinkLayer connection_parameters; 
 
@@ -145,6 +145,10 @@ int llopen(LinkLayer connectionParameters)
 
             // reads back the Ua Message
             unsigned char buf[BUF_SIZE];
+
+            //for tracking which bites to read
+            int i = 0;
+            //counter for the state
             int counter = 0;
             while (counter != 5)
             {
@@ -156,35 +160,36 @@ int llopen(LinkLayer connectionParameters)
                     //state machine
                     switch (counter){
                         case 0:
-                            if (buf[counter] == FLAG) 
+                            if (buf[i] == FLAG) 
                             counter = 1;
                             break;   
                         case 1:
-                            if (buf[counter] == FLAG) counter = 1;
-                            if (buf[counter] == A_UA) counter = 2;
+                            if (buf[i] == FLAG) counter = 1;
+                            if (buf[i] == A_UA) counter = 2;
                             else counter = 0;
                             break;
                         case 2:
-                            if (buf[counter] == FLAG) counter = 1;
-                            if (buf[counter] == C_UA) counter = 3;
+                            if (buf[i] == FLAG) counter = 1;
+                            if (buf[i] == C_UA) counter = 3;
                             else counter = 0;
                             break;
                         case 3:
-                            if (buf[counter] == FLAG) counter = 1;
-                            if (buf[counter] == BCC_UA) counter = 4;
+                            if (buf[i] == FLAG) counter = 1;
+                            if (buf[i] == BCC_UA) counter = 4;
                             else {
                                 printf("bcc doesn't match\n");
                                 counter = 0;
                             }
                             break;
                         case 4:
-                            if (buf[counter] == FLAG) counter = 5;
+                            if (buf[i] == FLAG) counter = 5;
                             else counter = 0;
                             break;
                         
                         default:
                             break;
                     }
+                    i++;
                 }
                 // timeout
                 if (alarmEnabled == FALSE) break;
@@ -299,78 +304,82 @@ int llwrite(const unsigned char *buf, int bufSize)
     }
 
 
-    // check bcc2
+    // checks if the  bcc2 itself is a escape character
     if (BCC2 == 0x7E || BCC2 == 0x7D) counter++;
+
+    // adds the extra bites needed for byte stuffing
     unsigned char buf_after_byte_stuffing[bufSize+counter];
-    // replace 0x7E and 0x7D
-    for (int i = 0, j = 0; i < bufSize; i++) {
-        if (buf[i] == 0x7E) {
-            buf_after_byte_stuffing[j] = 0x7D;
-            buf_after_byte_stuffing[j+1] = 0x5E;
-            j+=2;
+
+    // replaces 0x7E and 0x7D
+    for (int originalIndex = 0, afterIndex = 0; originalIndex < bufSize; originalIndex++) {
+        if (buf[originalIndex] == 0x7E) {
+            buf_after_byte_stuffing[afterIndex] = 0x7D;
+            buf_after_byte_stuffing[afterIndex+1] = 0x5E;
+            afterIndex+=2;
         }
-        else if (buf[i] == 0x7D) {
-            buf_after_byte_stuffing[j] = 0x7D;
-            buf_after_byte_stuffing[j+1] = 0x5D;
-            j+=2;
+        else if (buf[originalIndex] == 0x7D) {
+            buf_after_byte_stuffing[afterIndex] = 0x7D;
+            buf_after_byte_stuffing[afterIndex+1] = 0x5D;
+            afterIndex+=2;
         }
         else {
-            buf_after_byte_stuffing[j] = buf[i];
-            j++;
+            buf_after_byte_stuffing[afterIndex] = buf[originalIndex];
+            afterIndex++;
         }
     }
 
-    // CREATE INFORMATION MESSAGE
-    unsigned char packet_to_send[bufSize+counter+6];
-    packet_to_send[0] = FLAG;
-    packet_to_send[1] = A_SET;
-    switch (tramaType)
-    {
-    case TRUE:
-        packet_to_send[2] = C_0;
-        break;
-    case FALSE:
-        packet_to_send[2] = C_1;
-        break;
-    default:
-        break;
-    }
-    packet_to_send[3] = packet_to_send[1] ^ packet_to_send[2];
+    // creates the packet to be sent
 
-    // add buf to information message
-    for (int i = 4, j = 0; i < bufSize+counter+4; i++, j++) {
-        packet_to_send[i] = buf_after_byte_stuffing[j];
+    //6 extra bites are for htte control characters
+    unsigned char packetSend[bufSize+counter+6];
+    packetSend[0] = FLAG;
+    packetSend[1] = A_SET;
+    switch (tramaType){
+        case TRUE:
+            packetSend[2] = C_0;
+            break;
+        case FALSE:
+            packetSend[2] = C_1;
+            break;
+        default:
+            break;
     }
+    //bcc
+    packetSend[3] = packetSend[1] ^ packetSend[2];
+
+    // add buf to the packet information
+    for (int i = 4, j = 0; i < bufSize+counter+4; i++, j++) {
+        packetSend[i] = buf_after_byte_stuffing[j];
+    }
+
     // byte stuffing for bcc2
     if (BCC2 == 0x7E) {
-        packet_to_send[bufSize+counter+3] = 0x7D;
-        packet_to_send[bufSize+counter+4] = 0x5E;
-        packet_to_send[bufSize+counter+5] = FLAG;
+        packetSend[bufSize+counter+3] = 0x7D;
+        packetSend[bufSize+counter+4] = 0x5E;
+        packetSend[bufSize+counter+5] = FLAG;
     }
     else if (BCC2 == 0x7D) {
-        packet_to_send[bufSize+counter+3] = 0x7D;
-        packet_to_send[bufSize+counter+4] = 0x5D;
-        packet_to_send[bufSize+counter+5] = FLAG;
+        packetSend[bufSize+counter+3] = 0x7D;
+        packetSend[bufSize+counter+4] = 0x5D;
+        packetSend[bufSize+counter+5] = FLAG;
     }
     else {
-        packet_to_send[bufSize+counter+4] = BCC2;
-        packet_to_send[bufSize+counter+5] = FLAG;
+        packetSend[bufSize+counter+4] = BCC2;
+        packetSend[bufSize+counter+5] = FLAG;
     }
 
     // next trama to send
-    if (tramaType == TRUE) tramaType = FALSE;
-    else tramaType = TRUE;
+    tramaType ^= 1;
 
-    // SEND INFORMATION MESSAGE
     // Set alarm function handler
     (void)signal(SIGALRM, alarmHandler);
 
-    // sends message at most 3 times
+    // sets the alarm count for the ammount of nRetransmissions
     while (alarmCount <= connection_parameters.nRetransmissions)
     {
-        // SEND INFORMATION PACKET
-        int bytes = write(fd, packet_to_send, sizeof(packet_to_send));
-        printf("INFORMATION PACKET SENT - %d bytes written\n", bytes);
+        // sends the actual information packet
+        int bytes = write(fd, packetSend, sizeof(packetSend));
+        printf("Sent Information Packet with %d bytes being written\n", bytes);
 
         // sets alarm of 3 seconds
         if (alarmEnabled == FALSE)
@@ -379,52 +388,52 @@ int llwrite(const unsigned char *buf, int bufSize)
             alarmEnabled = TRUE;
         }
 
-        // READ RESPONSE
+        // reads the response
         unsigned char response[BUF_SIZE];
         int i = 0;
-        int STATE = 0;
-        while (STATE != 5)
+        int counter = 0;
+        while (counter != 5)
         {
             int bytes = read(fd, response + i, 1);
-            //printf("%hx %d\n", response[i], STATE);
+            //wasn't able to read
             if (bytes == -1) break;
             if (bytes > 0) {
                 // STATE MACHINE
-                switch (STATE)
+                switch (counter)
                 {
                 case 0:
-                    if (response[i] == FLAG) STATE = 1;
+                    if (response[i] == FLAG) counter = 1;
                     break;
                 case 1:
-                    if (response[i] == FLAG) STATE = 1;
-                    if (response[i] == A_UA) STATE = 2;
-                    else STATE = 0;
+                    if (response[i] == FLAG) counter = 1;
+                    if (response[i] == A_UA) counter = 2;
+                    else counter = 0;
                     break;
                 case 2:
-                    if (response[i] == FLAG) STATE = 1;
+                    if (response[i] == FLAG) counter = 1;
                     if (response[i] == C_REJ) {
-                        STATE = 0;
+                        counter = 0;
                         printf("REJ received\n");
                         break;
                     }
-                    if (tramaType == TRUE && response[i] == C_RR0) STATE = 3;
-                    else if (tramaType == FALSE && response[i] == C_RR1) STATE = 3;
+                    if (tramaType == TRUE && response[i] == C_RR0) counter = 3;
+                    else if (tramaType == FALSE && response[i] == C_RR1) counter = 3;
                     else {
                         // SEND PREVIOUS TRAMA
                         // SEND INFORMATION PACKET
-                        int bytes = write(fd, previous_trama, sizeof(previous_trama));
+                        int bytes = write(fd, previousTrama, sizeof(previousTrama));
                         printf("INFORMATION PACKET SENT - %d bytes written\n", bytes);
-                        STATE = 0;
+                        counter = 0;
                     }
                     break;
                 case 3:
-                    if (response[i] == FLAG) STATE = 1;
-                    if (response[i] == (response[i-1] ^ response[i-2])) STATE = 4;
-                    else STATE = 0;
+                    if (response[i] == FLAG) counter = 1;
+                    if (response[i] == (response[i-1] ^ response[i-2])) counter = 4;
+                    else counter = 0;
                     break;
                 case 4:
-                    if (response[i] == FLAG) STATE = 5;
-                    else STATE = 0;
+                    if (response[i] == FLAG) counter = 5;
+                    else counter = 0;
                     break;
                 
                 default:
@@ -436,29 +445,29 @@ int llwrite(const unsigned char *buf, int bufSize)
             if (alarmEnabled == FALSE) break;
         }
         
-        // RECEIVED RR MESSAGE
-        if (STATE == 5) {
+        if (counter == 5) {
             alarmCount = 0;
-            printf("RR RECEIVED\n");
+            printf("RR was received!\n");
             break;
         }
     }
 
-    // SAVE TRAMA SENT
+    // saveTrama that was sent
     for (int i = 0; i < BUF_SIZE; i++) {
-        previous_trama[i] = packet_to_send[i];
+        previousTrama[i] = packetSend[i];
     }
 
     printf("-------llwrite finished-------\n");
 
-    // TIMEOUT ERROR
+    // timeout error
     if (alarmCount > connection_parameters.nRetransmissions) {
+        printf("Timeout ammount exceded!");
         alarmCount = 0;
         return -1;
     }
 
-    // SUCCESSFUL
-    return sizeof(packet_to_send);
+    printf("llwrite was successful my g!");
+    return sizeof(packetSend);
 }
 
 ////////////////////////////////////////////////
