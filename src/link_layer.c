@@ -52,7 +52,7 @@ LinkLayer connection_parameters;
 // Alarm function handler
 void alarmHandler(int signal)
 {
-    printf("%d \n",alarmEnabled);
+    printf("alarm enabled = %d \n",alarmEnabled);
     alarmEnabled = FALSE;
     alarmCount++;
 
@@ -136,7 +136,7 @@ int llopen(LinkLayer connectionParameters)
             int bytes = write(fd, setMessage, 5);
             printf("Sent Set Message with %d bytes being written\n", bytes);
 
-            // salarm setter
+            // alarm setter
             if (alarmEnabled == FALSE)
             {
                 alarm(connectionParameters.timeout); // alarm trigger
@@ -152,7 +152,7 @@ int llopen(LinkLayer connectionParameters)
             int counter = 0;
             while (counter != 5)
             {
-                int bytes = read(fd, buf + counter, 1);
+                int bytes = read(fd, buf + i, 1);
                 if (bytes == -1){
                     break;
                     }
@@ -177,7 +177,7 @@ int llopen(LinkLayer connectionParameters)
                             if (buf[i] == FLAG) counter = 1;
                             if (buf[i] == BCC_CONTROL_UA) counter = 4;
                             else {
-                                printf("bcc doesn't match\n");
+                                printf("BCC doesn't match\n");
                                 counter = 0;
                             }
                             break;
@@ -192,13 +192,16 @@ int llopen(LinkLayer connectionParameters)
                     i++;
                 }
                 // timeout
-                if (alarmEnabled == FALSE) break;
+                if (alarmEnabled == FALSE) {
+                    break;
+                }
             }
             
+
             // received ua message
             if (counter == 5) {
-                alarmCount = 0;
                 printf("Ua Message was received\n");
+                alarmCount = 0;
                 break;
             }
         }
@@ -208,11 +211,13 @@ int llopen(LinkLayer connectionParameters)
     else if(connectionParameters.role == LlRx){
         //reads the Set Message
         unsigned char buf[BUF_SIZE];
+        int i = 0;
         int counter = 0;
         while (counter != 5)
         {
-            int bytes = read(fd, buf + counter, 1);
+            int bytes = read(fd, buf + i,1);
             if (bytes > 0) {
+                printf("we're here");
                 // state machine
                 switch (counter){
                     case 0:
@@ -243,6 +248,7 @@ int llopen(LinkLayer connectionParameters)
                     default:
                         break;
                 }
+                i++;
             }
         }
         printf("SET RECEIVED\n");
