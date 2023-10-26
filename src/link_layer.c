@@ -52,6 +52,7 @@ LinkLayer connection_parameters;
 // Alarm function handler
 void alarmHandler(int signal)
 {
+    printf("%d \n",alarmEnabled);
     alarmEnabled = FALSE;
     alarmCount++;
 
@@ -543,7 +544,7 @@ int llread(unsigned char *packet)
                 if (buf[i] == FLAG) {
                     counter = 1;
                 }
-                if (buf[i] == (buf[i-1] ^ buf[i-2])) {
+                else if (buf[i] == (buf[i-1] ^ buf[i-2])) {
                     counter = 4;
                     i = -1;
                 }
@@ -613,7 +614,7 @@ int llread(unsigned char *packet)
     }
 
 
-    /* if (tramaType == TRUE) {
+    if (tramaType == TRUE) {
         // same frame twice
         if (errorTramaType) {
             rrMessage[2] = CONTROL_RR0;
@@ -635,25 +636,9 @@ int llread(unsigned char *packet)
             rrMessage[2] = CONTROL_RR0;
             tramaType = TRUE;
         }
-    } */
-
-    if (errorTramaType) {
-        if (tramaType == TRUE) {
-            rrMessage[2] = CONTROL_RR0;
-            printf("same frame twice\n");
-        } else {
-            rrMessage[2] = CONTROL_RR1;
-            printf("duplicate frame\n");
-        }
-    } else {
-        if (tramaType == TRUE) {
-            rrMessage[2] = CONTROL_RR1;
-            printf("duplicate frame\n");
-        } else {
-            rrMessage[2] = CONTROL_RR0;
-            tramaType = TRUE;
-        }
     }
+
+
     rrMessage[3] = rrMessage[1] ^ rrMessage[2];
     rrMessage[4] = FLAG;
 

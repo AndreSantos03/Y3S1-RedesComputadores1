@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <string.h>
+#include<unistd.h>
 
 #define BUF_SIZE 256
 // Campo de Controlo
@@ -17,7 +18,7 @@
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
-    // GET CONNECTION PARAMETERS
+    // GETh CONNECTION PARAMETERS
     LinkLayer connectionParameters;
     int i = 0;
     while (serialPort[i] != '\0'){
@@ -110,7 +111,7 @@ void sendFile(const char *filename) {
                 data_packet[i] = filedata[index_file_data];
             }
             if (llwrite(data_packet, 104) == -1) break;
-            sleep(3);
+            //sleep(3);
             bytes_to_send-=100;
             printf("DATA PACKET %d SENT - %d bytes written (%ld bytes left) \n", N, 104, bytes_to_send);
         }
@@ -124,7 +125,7 @@ void sendFile(const char *filename) {
                 data_packet[i] = filedata[index_file_data];
             }
             if (llwrite(data_packet, bytes_to_send+4) == -1) break;
-            sleep(3);
+            //sleep(3);
             printf("DATA PACKET %d SENT - %ld bytes written (%d bytes left) \n", N, bytes_to_send, 0);
             bytes_to_send = 0;
         }
