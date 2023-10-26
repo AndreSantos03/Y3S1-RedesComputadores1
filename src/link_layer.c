@@ -65,7 +65,7 @@ void alarmHandler(int signal)
 
 int llopen(LinkLayer connectionParameters)
 {
-    printf("-------llopen started-------");
+    printf("\n-------BEGINNING OF LLOPEN-------\n\n");
 
     connection_parameters = connectionParameters;
 
@@ -116,7 +116,7 @@ int llopen(LinkLayer connectionParameters)
     printf("New termios structure set\n");
 
     //transmitter
-    if(connectionParameters.role == LlTx){
+    if(connectionParameters.role == Transmitter){
 
         //Create the Set Message
         unsigned char setMessage[BUF_SIZE];
@@ -208,7 +208,7 @@ int llopen(LinkLayer connectionParameters)
     }
 
     //receiver
-    else if(connectionParameters.role == LlRx){
+    else if(connectionParameters.role == Receiver){
         //reads the Set Message
         unsigned char buf[BUF_SIZE];
         int i = 0;
@@ -265,7 +265,7 @@ int llopen(LinkLayer connectionParameters)
         int bytes = write(fd, ua_message, 5);
         printf("Sent UA Message with %d bytes being written\n", bytes);
     }
-    printf("-------llopen finished-------\n");
+    printf("\n-------END OF LLOPEN-------\n\n");
 
     //timed out
     if (alarmCount > connection_parameters.nRetransmissions) {
@@ -286,7 +286,7 @@ int llopen(LinkLayer connectionParameters)
 
 int llwrite(const unsigned char *buf, int bufSize)
 {
-    printf("-------llwrite started-------\n");
+    printf("\n-------BEGINNING OF LLWRITE------\n\n");
     printf("Sending trama  of type %d\n", !tramaType);
 
     /* // GENERATE BCC2
@@ -388,7 +388,7 @@ int llwrite(const unsigned char *buf, int bufSize)
     {
         // sends the actual information packet
         int bytes = write(fd, packetSend, sizeof(packetSend));
-        printf("Sent Information Packet with %d bytes being written\n", bytes);
+        printf("Information Packet Sent: %d bytes being written\n", bytes);
 
         // sets alarm of 3 seconds
         if (alarmEnabled == FALSE)
@@ -431,7 +431,7 @@ int llwrite(const unsigned char *buf, int bufSize)
                         // SEND PREVIOUS TRAMA
                         // SEND INFORMATION PACKET
                         int bytes = write(fd, previousTrama, sizeof(previousTrama));
-                        printf("INFORMATION PACKET SENT - %d bytes written\n", bytes);
+                        printf("Information Packet Sent:  %d bytes written\n", bytes);
                         counter = 0;
                     }
                     break;
@@ -456,7 +456,7 @@ int llwrite(const unsigned char *buf, int bufSize)
         
         if (counter == 5) {
             alarmCount = 0;
-            printf("RR was received!\n");
+            printf("RR received! All good!\n");
             break;
         }
     }
@@ -466,7 +466,7 @@ int llwrite(const unsigned char *buf, int bufSize)
         previousTrama[i] = packetSend[i];
     }
 
-    printf("-------llwrite finished-------\n");
+    printf("\n-------END OF LLWRITE-------\n\n");
 
     // timeout error
     if (alarmCount > connection_parameters.nRetransmissions) {
@@ -475,7 +475,6 @@ int llwrite(const unsigned char *buf, int bufSize)
         return -1;
     }
 
-    printf("llwrite was successful my g!");
     return sizeof(packetSend);
 }
 
@@ -490,7 +489,7 @@ int llwrite(const unsigned char *buf, int bufSize)
 
 int llread(unsigned char *packet)
 {
-    printf("-------llread started-------\n");
+    printf("\n-------BEGINNING OF LLREAD-------\n\n");
     printf("Receiving trama of type: %d!\n", !tramaType);
 
     unsigned char buf[BUF_SIZE];
@@ -598,7 +597,7 @@ int llread(unsigned char *packet)
         BCC2 = BCC2 ^ packet[i];
     }
 
-    printf("Packet was received\n");
+    printf("Packet was received!\n");
 
     // creates the RR message
     unsigned char rrMessage[5];
@@ -615,7 +614,7 @@ int llread(unsigned char *packet)
         int bytes = write(fd, rrMessage, 5);
         printf("REJ reject message was sent written with %d bytes\n", bytes);
 
-        printf("-------llread finished-------\n");
+        printf("\n-------END OF LLREAD-------\n\n");
         return -1;
     }
 
@@ -624,7 +623,7 @@ int llread(unsigned char *packet)
         // same frame twice
         if (errorTramaType) {
             rrMessage[2] = CONTROL_RR0;
-            printf("same frame twice\n");
+            printf("Same frame twice\n");
         }
         else {
             rrMessage[2] = CONTROL_RR1;
@@ -635,7 +634,7 @@ int llread(unsigned char *packet)
         // same frame twice
         if (errorTramaType) {
             rrMessage[2] = CONTROL_RR1;
-            printf("duplicate frame \n");
+            printf("Duplicate frame \n");
         }
         // NO ERROR
         else {
@@ -650,9 +649,9 @@ int llread(unsigned char *packet)
 
     // sends the rr message
     int bytes = write(fd, rrMessage, 5);
-    printf("Sending RR message, writes %d bytes\n", bytes);
+    printf("Sending RR message, everything is good, %d bytes written \n", bytes);
 
-    printf("-------llread finished-------\n");
+    printf("\n-------END OF LLREAD-------\n\n");
 
     // same trama twice error
     if (errorTramaType) return -1;
@@ -667,11 +666,11 @@ int llread(unsigned char *packet)
 
 int llclose(LinkLayer connectionParameters)
 {
-    printf("-------llclose started-------\n\n");
+    printf("\n-------BEGINNING OF LLCLOSE-------\n\n");
 
 
     // transmitter
-    if (connectionParameters.role == LlTx){
+    if (connectionParameters.role == Transmitter){
         // CREATE DISC MESSAGE
         unsigned char disconnectMessage[BUF_SIZE];
         disconnectMessage[0] = FLAG;
@@ -745,7 +744,7 @@ int llclose(LinkLayer connectionParameters)
                                 counter = 4;
                             }
                             else {
-                                printf("error in the bcc!\n");
+                                printf("Error in the bcc!\n");
                                 counter = 0;
                             }
                             break;
@@ -787,7 +786,7 @@ int llclose(LinkLayer connectionParameters)
 
 
     // receiver
-    else if(connectionParameters.role == LlRx){
+    else if(connectionParameters.role == Receiver){
         // reads the DISC message
         unsigned char buf[BUF_SIZE];
         //keep tracks of which párt of buf to read
@@ -832,7 +831,7 @@ int llclose(LinkLayer connectionParameters)
                             counter = 4;
                         }
                         else {
-                            printf("wrong bcc!\n");
+                            printf("Wrong bcc!\n");
                             counter = 0;
                         }
                         break;
@@ -862,7 +861,7 @@ int llclose(LinkLayer connectionParameters)
         disconnectMessage[4] = FLAG;
 
         int bytes = write(fd, disconnectMessage, 5);
-        printf("Sent DISC message,wrote %d bytes\n", bytes);
+        printf("Sent DISC message, %d bytes written\n", bytes);
 
         // reads the UA message
         //keep tracks of which párt of buf to read
@@ -912,7 +911,7 @@ int llclose(LinkLayer connectionParameters)
                             counter = 4;
                         }
                         else {
-                            printf("wrong bcc\n");
+                            printf("Wrong bcc\n");
                             counter = 0;
                         }
                         break;
@@ -933,7 +932,7 @@ int llclose(LinkLayer connectionParameters)
         printf("Received UA message\n");
     }
     else{
-        printf("neither transmitter nor receiver!");
+        printf("Neither transmitter nor receiver!");
     }
 
     // Restore the old port settings
@@ -945,7 +944,7 @@ int llclose(LinkLayer connectionParameters)
 
     close(fd);
 
-    printf("-------llclose finished-------\n");
+    printf("\n-------END OF LLCLOSE-------\n\n");
 
     return 1;
 }

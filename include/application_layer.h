@@ -17,7 +17,7 @@
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename);
 
-void sendFile(const char *filename);
-void receiveFile();
+void transmit(const char *filename);
+void receive();
 
 #endif // _APPLICATION_LAYER_H_

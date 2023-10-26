@@ -11,146 +11,143 @@
 #define BUF_SIZE 256
 // Campo de Controlo
 // Define o tipo de trama 
-#define C_DADOS 0x01
+#define C_DATA 0x01
 #define C_START 0x02
 #define C_END 0x03
 
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
-    // GETh CONNECTION PARAMETERS
+    // get connection parameters and store them in a struct
     LinkLayer connectionParameters;
-    int i = 0;
-    while (serialPort[i] != '\0'){
+    int i;
+    for (i = 0; serialPort[i] != '\0'; i++){
         connectionParameters.serialPort[i] = serialPort[i];
-        i++;
     }
 
+
     connectionParameters.serialPort[i] = serialPort[i];
-    if (role[0] == 't') connectionParameters.role = LlTx;
-    else if (role[0] == 'r') connectionParameters.role = LlRx;
+    if (role[0] == 't') connectionParameters.role = Transmitter;
+    else if (role[0] == 'r') connectionParameters.role = Receiver;
     connectionParameters.baudRate = baudRate;
     connectionParameters.nRetransmissions = nTries;
     connectionParameters.timeout = timeout;
 
-    // CALL LLOPEN
+    // Open cable connection with set frame 
     if (llopen(connectionParameters) == -1) return;
 
-    switch (connectionParameters.role)
-    {
-    case LlTx:
-        // SENDS FILE PACKET BY PACKET
-        {
-            sendFile(filename);
-        }
-        break;
-    case LlRx:
-        // RECEIVES FILE PACKET BY PACKET
-        {
-            receiveFile();
-        }
-    default:
-        break;
+    // Check if we are the Transmitter or Receiver and act acoordlingly
+    if(connectionParameters.role == Transmitter){
+        transmit(filename);
     }
-
-    // CALL LLCLOSE
+    else {
+        receive();
+    }
+    
+    // Close cable connection
     llclose(connectionParameters);
 }
 
-void sendFile(const char *filename) {
-    // OPEN FILE FOR READING
+void transmit(const char *filename) {
+    // fopen for file reading
     FILE *file;
     file = fopen(filename, "rb");
 
-    // GET FILE SIZE
+    // get and store file size
     struct stat stats;
     stat(filename, &stats);
     size_t filesize = stats.st_size;
     printf("File Size: %ld bytes \n", filesize);
     printf("File Name: %s \n", filename);
 
-    // READ FROM FILE
+    // fread to read from file
     unsigned char *filedata;
     filedata = (unsigned char *)malloc(filesize);
     fread(filedata, sizeof(unsigned char), filesize, file);
 
-    // SEND TRAMA START
-    unsigned char start[30];
-    start[0] = C_START;
+    // send start frame
+    unsigned char start_frame[30];
+    start_frame[0] = C_START;
 
     // 0 - file size
-    start[1] = 0x0;
-    start[2] = sizeof(size_t);
-    start[3] = (filesize >> 24) & 0xFF;
-    start[4] = (filesize >> 16) & 0xFF;
-    start[5] = (filesize >> 8) & 0xFF;
-    start[6] = filesize & 0xFF;
+    start_frame[1] = 0x0;
+    start_frame[2] = sizeof(size_t);
+    start_frame[3] = (filesize >> 24) & 0xFF;
+    start_frame[4] = (filesize >> 16) & 0xFF;
+    start_frame[5] = (filesize >> 8) & 0xFF;
+    start_frame[6] = filesize & 0xFF;
     
     // 1 - file name
-    start[7] = strlen(filename)+1; 
+    start_frame[7] = strlen(filename)+1; 
     int i = 8;
-    for(int j = 0; j < strlen(filename)+1; j++, i++) {
-        start[i] = filename[j];
+    int j = 0;
+    while (j < strlen(filename) + 1){
+        start_frame[i] = filename[j];
+        j++;
+        i++;
     }
 
-    llwrite(start, i);
-    printf("START MESSAGE SENT - %d bytes written \n", i);
+    llwrite(start_frame, i);
+    printf("START MESSAGE SENT: %d bytes written \n", i);
 
-    // SEND FILE DATA BY CHUNKS
-    size_t bytes_to_send = filesize;
+    // send data by packets of 100 except the last
+    size_t bytes_left_to_send = filesize;
     unsigned int N = 0; unsigned int index_file_data = 0;
-    while (bytes_to_send != 0)
+    while (bytes_left_to_send != 0)
     {
-        if (bytes_to_send >= 100) {
-            unsigned char data_packet[104]; // enviar 100 bytes
-            data_packet[0] = C_DADOS;
-            data_packet[1] = N % 255; // N – número de sequência (módulo 255)
-            data_packet[2] = 0x0; // L2 L1 – indica o número de octetos (K) do campo de dados
-            data_packet[3] = 0x64; // (K = 256 * L2 + L1)
+        if (bytes_left_to_send >= 100) {
+            unsigned char packet[104]; // enviar 100 bytes em cada pacote
+            packet[0] = C_DATA;
+            packet[1] = N % 255; // N – número de sequência (módulo 255)
+            packet[2] = 0x0; // L2 L1 – indica o número de octetos (K) do campo de dados
+            packet[3] = 0x64; // (K = 256 * L2 + L1)
             for (int i = 4; i < 104; i++, index_file_data++) {
-                data_packet[i] = filedata[index_file_data];
+                packet[i] = filedata[index_file_data];
             }
-            if (llwrite(data_packet, 104) == -1) break;
-            bytes_to_send-=100;
-            printf("DATA PACKET %d SENT - %d bytes written (%ld bytes left) \n", N, 104, bytes_to_send);
+            if (llwrite(packet, 104) == -1) break;
+            bytes_left_to_send-=100;
+            printf("DATA PACKET %d SENT: %d bytes written (%ld bytes left) \n", N, 104, bytes_left_to_send);
             //sleep(3);
 
         }
         else {
-            unsigned char data_packet[bytes_to_send+4]; // enviar os restantes bytes quando bytes_to_send < 100
-            data_packet[0] = C_DADOS;
-            data_packet[1] = N % 255; // N – número de sequência (módulo 255)
-            data_packet[2] = 0x0; // L2 L1 – indica o número de octetos (K) do campo de dados
-            data_packet[3] = bytes_to_send; // (K = 256 * L2 + L1)
-            for (int i = 4; i < bytes_to_send+4; i++, index_file_data++) {
-                data_packet[i] = filedata[index_file_data];
+            unsigned char packet[bytes_left_to_send+4]; // enviar os restantes bytes quando bytes_left_to_send < 100
+            packet[0] = C_DATA;
+            packet[1] = N % 255; // N – número de sequência (módulo 255)
+            packet[2] = 0x0; // L2 L1 – indica o número de octetos (K) do campo de dados
+            packet[3] = bytes_left_to_send; // (K = 256 * L2 + L1)
+            for (int i = 4; i < bytes_left_to_send+4; i++, index_file_data++) {
+                packet[i] = filedata[index_file_data];
             }
-            if (llwrite(data_packet, bytes_to_send+4) == -1) break;
-            printf("DATA PACKET %d SENT - %ld bytes written (%d bytes left) \n", N, bytes_to_send, 0);
-            bytes_to_send = 0;
-            ///sleep(3);
+            if (llwrite(packet, bytes_left_to_send+4) == -1) break;
+            printf("DATA PACKET %d SENT: %ld bytes written (%d bytes left) \n", N, bytes_left_to_send, 0);
+            bytes_left_to_send = 0;
+            //sleep(3);
         }
         N++;
     }
 
-    // SEND TRAMA END
+    // send end frame
     unsigned char end[30];
     end[0] = C_END;
-    for (int i = 1; i < 30; i++) {
-        end[i] = start[i];
+    int k = 1;
+    while (k < 30){
+        end[k] = start_frame[k];
+        k++;
     }
+    
     llwrite(end, i);
-    printf("END MESSAGE SENT - %d bytes written \n", i);
+    printf("END MESSAGE SENT: %d bytes written \n", i);
 
-    // CLOSE FILE FOR READING
+    // fclose for reading
     fclose(file);
 }
 
-void receiveFile() {
-    // RECEIVE TRAMA START
+void receive() {
+    // receive start frame
     unsigned char packet[BUF_SIZE];
     int bytes = llread(packet);
-    if (bytes != -1) printf("START RECEIVED - %d bytes received \n", bytes);
+    if (bytes != -1) printf("START RECEIVED: %d bytes received \n", bytes);
 
     // check start value
     if (packet[0] != C_START) exit(-1);
@@ -161,14 +158,18 @@ void receiveFile() {
 
     // get file name 
     char filename[20];
-    for(int j = 0, i = 8; j < packet[7]; j++, i++) {
+    int j = 0;
+    int i = 8;
+    while (j < packet[7]){
         filename[j] = packet[i];
+        j++;
+        i++;
     }
 
     printf("File Size: %ld bytes\n", filesize);
     printf("File Name: %s \n", filename);
 
-    // RECEIVE PACKET BY PACKET UNTIL TRAMA END
+    // receive each packet one by one until end frame
     unsigned char filedata[filesize];
     unsigned int index_file_data = 0;
     while (TRUE)
@@ -178,7 +179,7 @@ void receiveFile() {
 
         if (bytes != -1) {
             // check control
-            if (data_received[0] == C_DADOS) {
+            if (data_received[0] == C_DATA) {
                 if (bytes != -1) printf("DATA PACKET RECEIVED - %d bytes received \n", bytes);
                 // get K
                 unsigned int K = data_received[2] * 256 + data_received[3];
@@ -194,25 +195,28 @@ void receiveFile() {
         }
     }
 
-    // SAVE FILE
+    // save file
     // get received file name
     unsigned char final_file_name[strlen(filename)+10];
     for (int i = 0, j = 0; i < strlen(filename)+10; i++, j++) {
         if (filename[j] == '.') {
             unsigned char received[10] = "-received";
-            for (int k = 0; k < 9; k++, i++) {
+            int k = 0;
+            while (k < 9){
                 final_file_name[i] = received[k];
+                k++;
+                i++;
             }
         }
         final_file_name[i] = filename[j];
     }
-    // open file for writing
+    // fopen for writing
     FILE *file;
     file = fopen((char *) final_file_name, "wb+");
 
-    // write data to file
+    // fwrite to write to a file
     fwrite(filedata, sizeof(unsigned char), filesize, file);
 
-    // CLOSE FILE FOR WRITING
+    // fclose for writing
     fclose(file);
 }

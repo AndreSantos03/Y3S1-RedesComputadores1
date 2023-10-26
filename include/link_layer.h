@@ -8,8 +8,8 @@
 
 typedef enum
 {
-    LlTx,
-    LlRx,
+    Transmitter,
+    Receiver,
 } LinkLayerRole;
 
 typedef struct
