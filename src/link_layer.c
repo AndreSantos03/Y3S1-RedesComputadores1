@@ -236,7 +236,7 @@ int llopen(LinkLayer connectionParameters)
                         if (buf[counter] == FLAG) counter = 1;
                         if (buf[counter] == BCC_CONTROL_SET) counter = 4;
                         else {
-                            printf("error in the protocol\n");
+                            printf("Error in the protocol\n");
                             counter = 0;
                         }
                         break;
@@ -687,7 +687,7 @@ int llclose(LinkLayer connectionParameters)
         {
             // sends disc message
             int bytes = write(fd, disconnectMessage, 5);
-            printf("Sent DISC message,wrote %d bytes\n", bytes);
+            printf("Sent disconnect message, %d bytes written\n", bytes);
 
             // alarm triggering
             if (alarmEnabled == FALSE)
@@ -698,7 +698,7 @@ int llclose(LinkLayer connectionParameters)
 
             // READ DISC MESSAGE
             unsigned char buf[BUF_SIZE];
-            //keep tracks of which párt of buf to read
+            //keep tracks of which part of buf to read
             int i = 0;
             //keeps track of the state
             int counter = 0;
@@ -767,7 +767,7 @@ int llclose(LinkLayer connectionParameters)
             // received the DISC message
             if (counter == 5) {
                 alarmCount = 0;
-                printf("DISC RECEIVED\n");
+                printf("Disconnect received\n");
                 break;
             }
         }
@@ -781,7 +781,7 @@ int llclose(LinkLayer connectionParameters)
         ua_message[4] = FLAG;
 
         int bytes = write(fd, ua_message, 5);
-        printf("Sent UA message, wrote %d bytes\n", bytes);
+        printf("Sent UA message, %d bytes written\n", bytes);
     }
 
 
@@ -850,7 +850,7 @@ int llclose(LinkLayer connectionParameters)
                 i++; 
             }
         }
-        printf("Received the DISC message \n");
+        printf("Received the disconnect message \n");
 
         // sends the DISC message
         unsigned char disconnectMessage[BUF_SIZE];
@@ -861,7 +861,7 @@ int llclose(LinkLayer connectionParameters)
         disconnectMessage[4] = FLAG;
 
         int bytes = write(fd, disconnectMessage, 5);
-        printf("Sent DISC message, %d bytes written\n", bytes);
+        printf("Sent disconnect message, %d bytes written\n", bytes);
 
         // reads the UA message
         //keep tracks of which párt of buf to read
