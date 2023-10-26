@@ -20,25 +20,24 @@
 struct termios oldtio;
 struct termios newtio;
 
-
-#define FLAG 0x7E
-// Campo de Endereço
-#define A_SET 0x03    // Comandos enviados pelo Emissor e Respostas enviadas pelo Receptor
-#define A_UA 0x01    // Comandos enviados pelo Receptor e Respostas enviadas pelo Emissor
-// Campo de Controlo
-// Define o tipo de trama 
-#define C_SET 0x03 
-#define C_UA 0x07
-#define C_DISC 0x0B
-#define C_0 0x00
-#define C_1 0x40
-#define C_RR0 0x05
-#define C_RR1 0x85
-#define C_REJ 0x01
-// Campo de Proteção
-#define BCC_SET (A_SET ^ C_SET)
-#define BCC_UA (A_UA ^ A_UA)
 #define BUF_SIZE 256
+
+//flag
+#define FLAG 0x7E
+//used in commands sent by the transmitter and the replies sent by the receiver
+#define A_SET 0x03
+//used in commands sent by the receiver and the replies sent by the transmitter
+#define A_UA 0x01   
+#define CONTROL_SET 0x03 
+#define CONTROL_UA 0x07
+#define CONTROL_DIS 0x0B
+#define CONTROL_0 0x00
+#define CONTROL_1 0x40
+#define CONTROL_RR0 0x05
+#define CONTROL_RR1 0x85
+#define CONTROL_REJ 0x01
+#define BCC_CONTROL_SET (A_SET ^ CONTROL_SET)
+#define BCC_CONTROL_UA (A_UA ^ A_UA)
 
 
 int fd;
@@ -122,8 +121,8 @@ int llopen(LinkLayer connectionParameters)
         unsigned char setMessage[BUF_SIZE];
         setMessage[0] = FLAG;
         setMessage[1] = A_SET;
-        setMessage[2] = C_SET;
-        setMessage[3] = BCC_SET;
+        setMessage[2] = CONTROL_SET;
+        setMessage[3] = BCC_CONTROL_SET;
         setMessage[4] = FLAG;
 
         // Set alarm function handler
@@ -170,12 +169,12 @@ int llopen(LinkLayer connectionParameters)
                             break;
                         case 2:
                             if (buf[i] == FLAG) counter = 1;
-                            if (buf[i] == C_UA) counter = 3;
+                            if (buf[i] == CONTROL_UA) counter = 3;
                             else counter = 0;
                             break;
                         case 3:
                             if (buf[i] == FLAG) counter = 1;
-                            if (buf[i] == BCC_UA) counter = 4;
+                            if (buf[i] == BCC_CONTROL_UA) counter = 4;
                             else {
                                 printf("bcc doesn't match\n");
                                 counter = 0;
@@ -224,12 +223,12 @@ int llopen(LinkLayer connectionParameters)
                         break;
                     case 2:
                         if (buf[counter] == FLAG) counter = 1;
-                        if (buf[counter] == C_SET) counter = 3;
+                        if (buf[counter] == CONTROL_SET) counter = 3;
                         else counter = 0;
                         break;
                     case 3:
                         if (buf[counter] == FLAG) counter = 1;
-                        if (buf[counter] == BCC_SET) counter = 4;
+                        if (buf[counter] == BCC_CONTROL_SET) counter = 4;
                         else {
                             printf("error in the protocol\n");
                             counter = 0;
@@ -251,8 +250,8 @@ int llopen(LinkLayer connectionParameters)
         unsigned char ua_message[BUF_SIZE];
         ua_message[0] = FLAG;
         ua_message[1] = A_UA;
-        ua_message[2] = C_UA;
-        ua_message[3] = BCC_UA;
+        ua_message[2] = CONTROL_UA;
+        ua_message[3] = BCC_CONTROL_UA;
         ua_message[4] = FLAG;
 
         //sends the Ua Message
@@ -339,10 +338,10 @@ int llwrite(const unsigned char *buf, int bufSize)
     packetSend[1] = A_SET;
     switch (tramaType){
         case TRUE:
-            packetSend[2] = C_0;
+            packetSend[2] = CONTROL_0;
             break;
         case FALSE:
-            packetSend[2] = C_1;
+            packetSend[2] = CONTROL_1;
             break;
         default:
             break;
@@ -414,13 +413,13 @@ int llwrite(const unsigned char *buf, int bufSize)
                     break;
                 case 2:
                     if (response[i] == FLAG) counter = 1;
-                    if (response[i] == C_REJ) {
+                    if (response[i] == CONTROL_REJ) {
                         counter = 0;
                         printf("REJ received\n");
                         break;
                     }
-                    if (tramaType == TRUE && response[i] == C_RR0) counter = 3;
-                    else if (tramaType == FALSE && response[i] == C_RR1) counter = 3;
+                    if (tramaType == TRUE && response[i] == CONTROL_RR0) counter = 3;
+                    else if (tramaType == FALSE && response[i] == CONTROL_RR1) counter = 3;
                     else {
                         // SEND PREVIOUS TRAMA
                         // SEND INFORMATION PACKET
@@ -519,19 +518,19 @@ int llread(unsigned char *packet)
                 if (buf[i] == FLAG) {
                     counter = 1;
                 }
-                if (tramaType == TRUE && buf[i] == C_0) {
+                if (tramaType == TRUE && buf[i] == CONTROL_0) {
                     counter = 3;
                 }
-                else if (tramaType == FALSE && buf[i] == C_1) {
+                else if (tramaType == FALSE && buf[i] == CONTROL_1) {
                     counter = 3;
                 }
 
                 // wrong typpe of trauma
-                else if (tramaType == TRUE && buf[i] == C_1) {
+                else if (tramaType == TRUE && buf[i] == CONTROL_1) {
                     counter = 5;
                     errorTramaType = TRUE;
                 }
-                else if (tramaType == TRUE && buf[i] == C_0) {
+                else if (tramaType == TRUE && buf[i] == CONTROL_0) {
                     counter = 5;
                     errorTramaType = TRUE;
                 }
@@ -603,7 +602,7 @@ int llread(unsigned char *packet)
     if (BCC2 != packet[size_of_packet]) {
         printf("error bcc2\n");
 
-        rrMessage[2] = C_REJ;
+        rrMessage[2] = CONTROL_REJ;
         rrMessage[3] = rrMessage[1] ^ rrMessage[2];
         rrMessage[4] = FLAG;
         int bytes = write(fd, rrMessage, 5);
@@ -617,41 +616,41 @@ int llread(unsigned char *packet)
     /* if (tramaType == TRUE) {
         // same frame twice
         if (errorTramaType) {
-            rrMessage[2] = C_RR0;
+            rrMessage[2] = CONTROL_RR0;
             printf("same frame twice\n");
         }
         else {
-            rrMessage[2] = C_RR1;
+            rrMessage[2] = CONTROL_RR1;
             tramaType = FALSE;
         }
     }
     else {
         // same frame twice
         if (errorTramaType) {
-            rrMessage[2] = C_RR1;
+            rrMessage[2] = CONTROL_RR1;
             printf("duplicate frame \n");
         }
         // NO ERROR
         else {
-            rrMessage[2] = C_RR0;
+            rrMessage[2] = CONTROL_RR0;
             tramaType = TRUE;
         }
     } */
 
     if (errorTramaType) {
         if (tramaType == TRUE) {
-            rrMessage[2] = C_RR0;
+            rrMessage[2] = CONTROL_RR0;
             printf("same frame twice\n");
         } else {
-            rrMessage[2] = C_RR1;
+            rrMessage[2] = CONTROL_RR1;
             printf("duplicate frame\n");
         }
     } else {
         if (tramaType == TRUE) {
-            rrMessage[2] = C_RR1;
+            rrMessage[2] = CONTROL_RR1;
             printf("duplicate frame\n");
         } else {
-            rrMessage[2] = C_RR0;
+            rrMessage[2] = CONTROL_RR0;
             tramaType = TRUE;
         }
     }
@@ -686,8 +685,8 @@ int llclose(LinkLayer connectionParameters)
         unsigned char disconnectMessage[BUF_SIZE];
         disconnectMessage[0] = FLAG;
         disconnectMessage[1] = A_SET;
-        disconnectMessage[2] = C_DISC;
-        disconnectMessage[3] = (A_SET ^ C_DISC);
+        disconnectMessage[2] = CONTROL_DIS;
+        disconnectMessage[3] = (A_SET ^ CONTROL_DIS);
         disconnectMessage[4] = FLAG;
 
         // Set alarm function handler
@@ -740,7 +739,7 @@ int llclose(LinkLayer connectionParameters)
                         case 2:
                             if (buf[i] == FLAG){ counter = 1;
                             }
-                            else if (buf[i] == C_DISC) {
+                            else if (buf[i] == CONTROL_DIS) {
                                 counter = 3;
                             }
                             else {
@@ -751,7 +750,7 @@ int llclose(LinkLayer connectionParameters)
                             if (buf[i] == FLAG) {
                                 counter = 1;
                             }
-                            if (buf[i] == (A_UA ^ C_DISC)) {
+                            if (buf[i] == (A_UA ^ CONTROL_DIS)) {
                                 counter = 4;
                             }
                             else {
@@ -787,8 +786,8 @@ int llclose(LinkLayer connectionParameters)
         unsigned char ua_message[BUF_SIZE];
         ua_message[0] = FLAG;
         ua_message[1] = A_UA;
-        ua_message[2] = C_UA;
-        ua_message[3] = BCC_UA;
+        ua_message[2] = CONTROL_UA;
+        ua_message[3] = BCC_CONTROL_UA;
         ua_message[4] = FLAG;
 
         int bytes = write(fd, ua_message, 5);
@@ -827,7 +826,7 @@ int llclose(LinkLayer connectionParameters)
                         if (buf[i] == FLAG) {
                             counter = 1;
                         }
-                        if (buf[i] == C_DISC) {
+                        if (buf[i] == CONTROL_DIS) {
                             counter = 3;
                         }
                         else {
@@ -838,7 +837,7 @@ int llclose(LinkLayer connectionParameters)
                         if (buf[i] == FLAG) {
                             counter = 1;
                         }
-                        if (buf[i] == (A_SET ^ C_DISC)) {
+                        if (buf[i] == (A_SET ^ CONTROL_DIS)) {
                             counter = 4;
                         }
                         else {
@@ -867,8 +866,8 @@ int llclose(LinkLayer connectionParameters)
         unsigned char disconnectMessage[BUF_SIZE];
         disconnectMessage[0] = FLAG;
         disconnectMessage[1] = A_UA;
-        disconnectMessage[2] = C_DISC;
-        disconnectMessage[3] = (A_UA ^ C_DISC);
+        disconnectMessage[2] = CONTROL_DIS;
+        disconnectMessage[3] = (A_UA ^ CONTROL_DIS);
         disconnectMessage[4] = FLAG;
 
         int bytes = write(fd, disconnectMessage, 5);
@@ -907,7 +906,7 @@ int llclose(LinkLayer connectionParameters)
                         if (buf[i] == FLAG) {
                             counter = 1;
                         }
-                        if (buf[i] == C_UA) {
+                        if (buf[i] == CONTROL_UA) {
                             counter = 3;
                         }
                         else {
@@ -918,7 +917,7 @@ int llclose(LinkLayer connectionParameters)
                         if (buf[i] == FLAG) {
                             counter = 1;
                         }
-                        if (buf[i] == BCC_UA) {
+                        if (buf[i] == BCC_CONTROL_UA) {
                             counter = 4;
                         }
                         else {
