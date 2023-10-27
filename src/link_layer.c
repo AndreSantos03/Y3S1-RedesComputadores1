@@ -148,9 +148,9 @@ int llopen(LinkLayer connectionParameters)
 
             //for tracking which bites to read
             int i = 0;
-            //counter for the state
-            int counter = 0;
-            while (counter != 5)
+            //STATE for the state
+            int STATE = 0;
+            while (STATE != 5)
             {
                 int bytes = read(fd, buf + i, 1);
                 if (bytes == -1){
@@ -158,32 +158,32 @@ int llopen(LinkLayer connectionParameters)
                     }
                 if (bytes > 0) {
                     //state machine
-                    switch (counter){
+                    switch (STATE){
                         case 0:
                             if (buf[i] == FLAG) 
-                            counter = 1;
+                            STATE = 1;
                             break;   
                         case 1:
-                            if (buf[i] == FLAG) counter = 1;
-                            if (buf[i] == A_UA) counter = 2;
-                            else counter = 0;
+                            if (buf[i] == FLAG) STATE = 1;
+                            if (buf[i] == A_UA) STATE = 2;
+                            else STATE = 0;
                             break;
                         case 2:
-                            if (buf[i] == FLAG) counter = 1;
-                            if (buf[i] == CONTROL_UA) counter = 3;
-                            else counter = 0;
+                            if (buf[i] == FLAG) STATE = 1;
+                            if (buf[i] == CONTROL_UA) STATE = 3;
+                            else STATE = 0;
                             break;
                         case 3:
-                            if (buf[i] == FLAG) counter = 1;
-                            if (buf[i] == BCC_CONTROL_UA) counter = 4;
+                            if (buf[i] == FLAG) STATE = 1;
+                            if (buf[i] == BCC_CONTROL_UA) STATE = 4;
                             else {
                                 printf("BCC doesn't match\n");
-                                counter = 0;
+                                STATE = 0;
                             }
                             break;
                         case 4:
-                            if (buf[i] == FLAG) counter = 5;
-                            else counter = 0;
+                            if (buf[i] == FLAG) STATE = 5;
+                            else STATE = 0;
                             break;
                         
                         default:
@@ -199,7 +199,7 @@ int llopen(LinkLayer connectionParameters)
             
 
             // received ua message
-            if (counter == 5) {
+            if (STATE == 5) {
                 printf("Ua Message was received\n");
                 alarmCount = 0;
                 break;
@@ -212,37 +212,37 @@ int llopen(LinkLayer connectionParameters)
         //reads the Set Message
         unsigned char buf[BUF_SIZE];
         int i = 0;
-        int counter = 0;
-        while (counter != 5)
+        int STATE = 0;
+        while (STATE != 5)
         {
             int bytes = read(fd, buf + i,1);
             if (bytes > 0) {
                 printf("we're here");
                 // state machine
-                switch (counter){
+                switch (STATE){
                     case 0:
-                        if (buf[counter] == FLAG) counter = 1;
+                        if (buf[STATE] == FLAG) STATE = 1;
                         break;
                     case 1:
-                        if (buf[counter] == A_SET) counter = 2;
-                        else counter = 0;
+                        if (buf[STATE] == A_SET) STATE = 2;
+                        else STATE = 0;
                         break;
                     case 2:
-                        if (buf[counter] == FLAG) counter = 1;
-                        if (buf[counter] == CONTROL_SET) counter = 3;
-                        else counter = 0;
+                        if (buf[STATE] == FLAG) STATE = 1;
+                        if (buf[STATE] == CONTROL_SET) STATE = 3;
+                        else STATE = 0;
                         break;
                     case 3:
-                        if (buf[counter] == FLAG) counter = 1;
-                        if (buf[counter] == BCC_CONTROL_SET) counter = 4;
+                        if (buf[STATE] == FLAG) STATE = 1;
+                        if (buf[STATE] == BCC_CONTROL_SET) STATE = 4;
                         else {
                             printf("Error in the protocol\n");
-                            counter = 0;
+                            STATE = 0;
                         }
                         break;
                     case 4:
-                        if (buf[counter] == FLAG) counter = 5;
-                        else counter = 0;
+                        if (buf[STATE] == FLAG) STATE = 5;
+                        else STATE = 0;
                         break;
                     
                     default:
@@ -400,49 +400,49 @@ int llwrite(const unsigned char *buf, int bufSize)
         // reads the response
         unsigned char response[BUF_SIZE];
         int i = 0;
-        int counter = 0;
-        while (counter != 5)
+        int STATE = 0;
+        while (STATE != 5)
         {
             int bytes = read(fd, response + i, 1);
             //wasn't able to read
             if (bytes == -1) break;
             if (bytes > 0) {
                 // state machine
-                switch (counter)
+                switch (STATE)
                 {
                 case 0:
-                    if (response[i] == FLAG) counter = 1;
+                    if (response[i] == FLAG) STATE = 1;
                     break;
                 case 1:
-                    if (response[i] == FLAG) counter = 1;
-                    if (response[i] == A_UA) counter = 2;
-                    else counter = 0;
+                    if (response[i] == FLAG) STATE = 1;
+                    if (response[i] == A_UA) STATE = 2;
+                    else STATE = 0;
                     break;
                 case 2:
-                    if (response[i] == FLAG) counter = 1;
+                    if (response[i] == FLAG) STATE = 1;
                     if (response[i] == CONTROL_REJ) {
-                        counter = 0;
+                        STATE = 0;
                         printf("REJ received\n");
                         break;
                     }
-                    if (tramaType == TRUE && response[i] == CONTROL_RR0) counter = 3;
-                    else if (tramaType == FALSE && response[i] == CONTROL_RR1) counter = 3;
+                    if (tramaType == TRUE && response[i] == CONTROL_RR0) STATE = 3;
+                    else if (tramaType == FALSE && response[i] == CONTROL_RR1) STATE = 3;
                     else {
                         // SEND PREVIOUS TRAMA
                         // SEND INFORMATION PACKET
                         int bytes = write(fd, previousTrama, sizeof(previousTrama));
                         printf("Information Packet Sent:  %d bytes written\n", bytes);
-                        counter = 0;
+                        STATE = 0;
                     }
                     break;
                 case 3:
-                    if (response[i] == FLAG) counter = 1;
-                    if (response[i] == (response[i-1] ^ response[i-2])) counter = 4;
-                    else counter = 0;
+                    if (response[i] == FLAG) STATE = 1;
+                    if (response[i] == (response[i-1] ^ response[i-2])) STATE = 4;
+                    else STATE = 0;
                     break;
                 case 4:
-                    if (response[i] == FLAG) counter = 5;
-                    else counter = 0;
+                    if (response[i] == FLAG) STATE = 5;
+                    else STATE = 0;
                     break;
                 
                 default:
@@ -454,7 +454,7 @@ int llwrite(const unsigned char *buf, int bufSize)
             if (alarmEnabled == FALSE) break;
         }
         
-        if (counter == 5) {
+        if (STATE == 5) {
             alarmCount = 0;
             printf("RR received! All good!\n");
             break;
@@ -498,69 +498,69 @@ int llread(unsigned char *packet)
     //to keep track of which buf to read
     int i = 0;
     //keeps track of state
-    int counter = 0;
-    while (counter != 5){
+    int STATE = 0;
+    while (STATE != 5){
 
         int bytes = read(fd, buf + i, 1);
 
         if (bytes > 0) {
             //state machine
-            switch (counter)
+            switch (STATE)
             {
             case 0:
                 if (buf[i] == FLAG){
-                    counter = 1;
+                    STATE = 1;
                 }
                 break;
             case 1:
                 if (buf[i] == A_SET) {
-                    counter = 2;
+                    STATE = 2;
                 }
                 else {
-                    counter = 0;
+                    STATE = 0;
                 }
                 break;
             case 2:
                 if (buf[i] == FLAG) {
-                    counter = 1;
+                    STATE = 1;
                 }
                 if (tramaType == TRUE && buf[i] == CONTROL_0) {
-                    counter = 3;
+                    STATE = 3;
                 }
                 else if (tramaType == FALSE && buf[i] == CONTROL_1) {
-                    counter = 3;
+                    STATE = 3;
                 }
 
                 // wrong typpe of trauma
                 else if (tramaType == TRUE && buf[i] == CONTROL_1) {
-                    counter = 5;
+                    STATE = 5;
                     errorTramaType = TRUE;
                 }
                 else if (tramaType == TRUE && buf[i] == CONTROL_0) {
-                    counter = 5;
+                    STATE = 5;
                     errorTramaType = TRUE;
                 }
 
                 else {
-                    counter = 0;
+                    STATE = 0;
                 }
                 break;
             case 3:
                 if (buf[i] == FLAG) {
-                    counter = 1;
+                    STATE = 1;
                 }
                 else if (buf[i] == (buf[i-1] ^ buf[i-2])) {
-                    counter = 4;
+                    STATE = 4;
                     i = -1;
                 }
                 else {
-                    counter = 0;
+                    STATE = 0;
                     printf("error in the bcc checking\n");
                 }
                 break;
             case 4:
                 if (buf[i] == FLAG) {
-                    counter = 5;
+                    STATE = 5;
                 }
                 else {
                     sizeBuf++;
@@ -701,56 +701,56 @@ int llclose(LinkLayer connectionParameters)
             //keep tracks of which part of buf to read
             int i = 0;
             //keeps track of the state
-            int counter = 0;
-            while (counter != 5)
+            int STATE = 0;
+            while (STATE != 5)
             {
                 int bytes = read(fd, buf + i, 1);
                 //printf("%hx %d\n", buf[i], bytes);
                 if (bytes == -1) break;
                 if (bytes > 0) {
                     // state machine
-                    switch (counter){
+                    switch (STATE){
                         case 0:
                             if (buf[i] == FLAG) {
-                                counter = 1;
+                                STATE = 1;
                             }
                             break;
                         case 1:
                             if (buf[i] == FLAG) {
-                                counter = 1;
+                                STATE = 1;
                                 }
                             if (buf[i] == A_UA) {
-                                counter = 2;
+                                STATE = 2;
                             }
                             else {
-                                counter = 0;
+                                STATE = 0;
                             }
                             break;
                         case 2:
-                            if (buf[i] == FLAG){ counter = 1;
+                            if (buf[i] == FLAG){ STATE = 1;
                             }
                             else if (buf[i] == CONTROL_DIS) {
-                                counter = 3;
+                                STATE = 3;
                             }
                             else {
-                                counter = 0;
+                                STATE = 0;
                             }
                             break;
                         case 3:
                             if (buf[i] == FLAG) {
-                                counter = 1;
+                                STATE = 1;
                             }
                             if (buf[i] == (A_UA ^ CONTROL_DIS)) {
-                                counter = 4;
+                                STATE = 4;
                             }
                             else {
                                 printf("Error in the bcc!\n");
-                                counter = 0;
+                                STATE = 0;
                             }
                             break;
                         case 4:
-                            if (buf[i] == FLAG) counter = 5;
-                            else counter = 0;
+                            if (buf[i] == FLAG) STATE = 5;
+                            else STATE = 0;
                             break;
                         
                         default:
@@ -765,7 +765,7 @@ int llclose(LinkLayer connectionParameters)
             }
             
             // received the DISC message
-            if (counter == 5) {
+            if (STATE == 5) {
                 alarmCount = 0;
                 printf("Disconnect received\n");
                 break;
@@ -792,55 +792,55 @@ int llclose(LinkLayer connectionParameters)
         //keep tracks of which párt of buf to read
         int i = 0;
         //keeps track of the state
-        int counter = 0;
-        while (counter != 5)
+        int STATE = 0;
+        while (STATE != 5)
         {
             int bytes = read(fd, buf + i, 1);
             if (bytes > 0) {
                 //state machine
-                switch (counter){
+                switch (STATE){
                     case 0:
                         if (buf[i] == FLAG) {
-                            counter = 1;
+                            STATE = 1;
                         }
                         break;
                     case 1:
                         if (buf[i] == A_SET) {
-                            counter = 2;
+                            STATE = 2;
                         }
                         else{
-                         counter = 0;
+                         STATE = 0;
                         }
                         break;
                     case 2:
                         if (buf[i] == FLAG) {
-                            counter = 1;
+                            STATE = 1;
                         }
                         if (buf[i] == CONTROL_DIS) {
-                            counter = 3;
+                            STATE = 3;
                         }
                         else {
-                            counter = 0;
+                            STATE = 0;
                         }
                         break;
                     case 3:
                         if (buf[i] == FLAG) {
-                            counter = 1;
+                            STATE = 1;
                         }
                         if (buf[i] == (A_SET ^ CONTROL_DIS)) {
-                            counter = 4;
+                            STATE = 4;
                         }
                         else {
                             printf("Wrong bcc!\n");
-                            counter = 0;
+                            STATE = 0;
                         }
                         break;
                     case 4:
                         if (buf[i] == FLAG) {
-                            counter = 5;
+                            STATE = 5;
                         }
                         else {
-                            counter = 0;
+                            STATE = 0;
                         }
                         break;
                     
@@ -867,60 +867,60 @@ int llclose(LinkLayer connectionParameters)
         //keep tracks of which párt of buf to read
         i = 0;
         //keeps track of the state
-        counter = 0;
-        while (counter != 5)
+        STATE = 0;
+        while (STATE != 5)
         {
             int bytes = read(fd, buf + i, 1);
             //printf("%hx %d\n", buf[i], bytes);
             if (bytes == -1) break;
             if (bytes > 0) {
                 // state machine
-                switch (counter){
+                switch (STATE){
                     case 0:
                         if (buf[i] == FLAG) {
-                            counter = 1;
+                            STATE = 1;
                         }
                         break;
                     case 1:
                         if (buf[i] == FLAG) {
-                            counter = 1;
+                            STATE = 1;
                         }
                         if (buf[i] == A_UA) {
-                            counter = 2;
+                            STATE = 2;
                         }
                         else {
-                            counter = 0;
+                            STATE = 0;
                         }
                         break;
                     case 2:
                         if (buf[i] == FLAG) {
-                            counter = 1;
+                            STATE = 1;
                         }
                         if (buf[i] == CONTROL_UA) {
-                            counter = 3;
+                            STATE = 3;
                         }
                         else {
-                            counter = 0;
+                            STATE = 0;
                         }
                         break;
                     case 3:
                         if (buf[i] == FLAG) {
-                            counter = 1;
+                            STATE = 1;
                         }
                         if (buf[i] == BCC_CONTROL_UA) {
-                            counter = 4;
+                            STATE = 4;
                         }
                         else {
                             printf("Wrong bcc\n");
-                            counter = 0;
+                            STATE = 0;
                         }
                         break;
                     case 4:
                         if (buf[i] == FLAG) {
-                            counter = 5;
+                            STATE = 5;
                         }
                         else {
-                            counter = 0;
+                            STATE = 0;
                         }
                         break;
                     default:
