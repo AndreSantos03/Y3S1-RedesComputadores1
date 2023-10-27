@@ -221,27 +221,27 @@ int llopen(LinkLayer connectionParameters)
                 // state machine
                 switch (STATE){
                     case 0:
-                        if (buf[STATE] == FLAG) STATE = 1;
+                        if (buf[i] == FLAG) STATE = 1;
                         break;
                     case 1:
-                        if (buf[STATE] == A_SET) STATE = 2;
-                        else STATE = 0;
+                        if (buf[i] == A_SET) STATE = 2;
+                        else i = 0;
                         break;
                     case 2:
-                        if (buf[STATE] == FLAG) STATE = 1;
-                        if (buf[STATE] == CONTROL_SET) STATE = 3;
+                        if (buf[i] == FLAG) STATE = 1;
+                        if (buf[i] == CONTROL_SET) STATE = 3;
                         else STATE = 0;
                         break;
                     case 3:
-                        if (buf[STATE] == FLAG) STATE = 1;
-                        if (buf[STATE] == BCC_CONTROL_SET) STATE = 4;
+                        if (buf[i] == FLAG) STATE = 1;
+                        if (buf[i] == BCC_CONTROL_SET) STATE = 4;
                         else {
                             printf("Error in the protocol\n");
                             STATE = 0;
                         }
                         break;
                     case 4:
-                        if (buf[STATE] == FLAG) STATE = 5;
+                        if (buf[i] == FLAG) STATE = 5;
                         else STATE = 0;
                         break;
                     
