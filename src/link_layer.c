@@ -38,7 +38,7 @@ struct termios newtio;
 #define CONTROL_REJ 0x01
 #define BCC_CONTROL_SET (A_SET ^ CONTROL_SET)
 #define BCC_CONTROL_UA (A_UA ^ A_UA)
-
+#define ESC 0x7D
 
 int fd;
 int alarmEnabled = FALSE;
@@ -499,7 +499,7 @@ int llread(unsigned char *packet)
     int i = 0;
     //keeps track of state
     int STATE = 0;
-    while (STATE != 5){
+    while (STATE != 6){
 
         int bytes = read(fd, buf + i, 1);
 
@@ -530,15 +530,27 @@ int llread(unsigned char *packet)
                 else if (tramaType == FALSE && buf[i] == CONTROL_1) {
                     STATE = 3;
                 }
-
-                // wrong typpe of trauma
+                // wrong type of trauma
                 else if (tramaType == TRUE && buf[i] == CONTROL_1) {
-                    STATE = 5;
-                    errorTramaType = TRUE;
+                    unsigned char rrMessage[5];
+                    rrMessage[0] = FLAG;
+                    rrMessage[1] = A_UA;
+                    rrMessage[2] = CONTROL_RR0;
+                    rrMessage[3] = rrMessage[1] ^ rrMessage[2];
+                    rrMessage[4] = FLAG;
+
+                    int bytes = write(fd, rrMessage, 5);
+                    return -1;
                 }
                 else if (tramaType == TRUE && buf[i] == CONTROL_0) {
-                    STATE = 5;
-                    errorTramaType = TRUE;
+                    unsigned char rrMessage[5];
+                    rrMessage[0] = FLAG;
+                    rrMessage[1] = A_UA;
+                    rrMessage[2] = CONTROL_RR1;
+                    rrMessage[3] = rrMessage[1] ^ rrMessage[2];
+                    rrMessage[4] = FLAG;
+                    int bytes = write(fd, rrMessage, 5);
+                    return -1;
                 }
 
                 else {
@@ -559,105 +571,64 @@ int llread(unsigned char *packet)
                 }
                 break;
             case 4:
-                if (buf[i] == FLAG) {
-                    STATE = 5;
-                }
-                else {
-                    sizeBuf++;
+                if (byte == ESC) state = 5;
+                    else if (byte == FLAG){
+                        unsigned char bcc2 = packet[i-1];
+                        i--;
+                        packet[i] = '\0';
+                        unsigned char acc = packet[0];
+
+                        for (unsigned int j = 1; j < i; j++)
+                            acc ^= packet[j];
+
+                        if (bcc2 == acc){
+                            state = STOP_R;
+                            // creates the RR message
+                            unsigned char rrMessage[5];
+                            rrMessage[0] = FLAG;
+                            rrMessage[1] = A_UA;
+                            rrMessage[3] = rrMessage[1] ^ rrMessage[2];
+                            rrMessage[4] = FLAG;
+
+                            // sends the rr message
+                            int bytes = write(fd, rrMessage, 5);
+
+
+                            printf("\n-------END OF LLREAD-------\n\n");
+                            tramaType = (tramaType + 1)%2;
+                            return i; 
+                        }
+                        else{
+                            printf("Error: retransmition\n");
+                            unsigned char rrMessage[5];
+                            rrMessage[0] = FLAG;
+                            rrMessage[1] = A_UA; rrMessage[2] = CONTROL_REJ;
+                            rrMessage[3] = rrMessage[1] ^ rrMessage[2];
+                            rrMessage[4] = FLAG;
+                            int bytes = write(fd, rrMessage, 5);
+                            printf("REJ reject message was sent written with %d bytes\n", bytes);
+                            return -1;
+                        };
+
+                    }
+                    else{
+                        packet[i++] = byte;
+                    }
+                    break;
+            case 5:
+                state = 4;
+                if (byte == ESC || byte == FLAG) packet[i++] = byte;
+                else{
+                    packet[i++] = ESC;
+                    packet[i++] = byte;
                 }
                 break;
-            
-            default:
+            default: 
                 break;
             }
             i++; 
         }
     }
-
-    // byte destuffing
-    int size_of_packet = sizeBuf;
-    for (int originalSize = 0, destuffedSize = 0; originalSize < sizeBuf; originalSize++, destuffedSize++) {
-        if (buf[originalSize] == 0x7D && buf[originalSize+1] == 0x5E) {
-            packet[destuffedSize] = 0x7E;
-            originalSize++; size_of_packet--;
-        }
-        else if (buf[originalSize] == 0x7D && buf[originalSize+1] == 0x5D) {
-            packet[destuffedSize] = 0x7D;
-            originalSize++; size_of_packet--;
-        }
-        else {
-            packet[destuffedSize] = buf[originalSize];
-        }
-    }
-
-    // checks if bcc2 is working correctly
-    size_of_packet--;
-    unsigned char BCC2 = packet[0];
-    for (int i = 1; i < size_of_packet; i++) {
-        BCC2 = BCC2 ^ packet[i];
-    }
-
-    printf("Packet was received!\n");
-
-    // creates the RR message
-    unsigned char rrMessage[5];
-    rrMessage[0] = FLAG;
-    rrMessage[1] = A_UA;
-
-    // checks for bcc2 error
-    if (BCC2 != packet[size_of_packet]) {
-        printf("error bcc2\n");
-
-        rrMessage[2] = CONTROL_REJ;
-        rrMessage[3] = rrMessage[1] ^ rrMessage[2];
-        rrMessage[4] = FLAG;
-        int bytes = write(fd, rrMessage, 5);
-        printf("REJ reject message was sent written with %d bytes\n", bytes);
-
-        printf("\n-------END OF LLREAD-------\n\n");
-        return -1;
-    }
-
-
-    if (tramaType == TRUE) {
-        // same frame twice
-        if (errorTramaType) {
-            rrMessage[2] = CONTROL_RR0;
-            printf("Same frame twice\n");
-        }
-        else {
-            rrMessage[2] = CONTROL_RR1;
-            tramaType = FALSE;
-        }
-    }
-    else {
-        // same frame twice
-        if (errorTramaType) {
-            rrMessage[2] = CONTROL_RR1;
-            printf("Duplicate frame \n");
-        }
-        // NO ERROR
-        else {
-            rrMessage[2] = CONTROL_RR0;
-            tramaType = TRUE;
-        }
-    }
-
-
-    rrMessage[3] = rrMessage[1] ^ rrMessage[2];
-    rrMessage[4] = FLAG;
-
-    // sends the rr message
-    int bytes = write(fd, rrMessage, 5);
-    printf("Sending RR message, everything is good, %d bytes written \n", bytes);
-
-    printf("\n-------END OF LLREAD-------\n\n");
-
-    // same trama twice error
-    if (errorTramaType) return -1;
-
-    // works!
-    return size_of_packet;
 }
 
 // ======================
