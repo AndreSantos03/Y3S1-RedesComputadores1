@@ -14,25 +14,6 @@
 #include <signal.h>
 #include <time.h>
 
-#define _POSIX_SOURCE 1
-#define BAUDRATE 38400
-#define MAX_PAYLOAD_SIZE 1000
-
-#define BUF_SIZE 256
-#define FALSE 0
-#define TRUE 1
-
-#define FLAG 0x7E
-#define ESC 0x7D
-#define A_ER 0x03
-#define A_RE 0x01
-#define C_SET 0x03
-#define C_DISC 0x0B
-#define C_UA 0x07
-#define C_RR(Nr) ((Nr << 7) | 0x05)
-#define C_REJ(Nr) ((Nr << 7) | 0x01)
-#define C_N(Ns) (Ns << 6)
-
 typedef enum
 {
    LlTx,
@@ -42,14 +23,14 @@ typedef enum
 typedef enum
 {
    START,
-   FLAG_RCV,
-   A_RCV,
-   C_RCV,
+   FLAG_RECEIVED,
+   A_RECEIVED,
+   C_RECEIVED,
    BCC1_OK,
-   STOP_R,
-   DATA_FOUND_ESC,
-   READING_DATA,
-   DISCONNECTED,
+   EXIT,
+   ESCAPE_FOUND,
+   PACKET,
+   DISCONNECT,
    BCC2_OK
 } LinkLayerState;
 

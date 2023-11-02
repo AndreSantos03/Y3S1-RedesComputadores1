@@ -16,13 +16,20 @@
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
-    LinkLayer linkLayer;
-    strcpy(linkLayer.serialPort,serialPort);
-    linkLayer.role = strcmp(role, "tx") ? LlRx : LlTx;
-    linkLayer.baudRate = baudRate;
-    linkLayer.nRetransmissions = nTries;
-    linkLayer.timeout = timeout;
+    // GET CONNECTION PARAMETERS
+    LinkLayer connectionParameters;
+    int i = 0;
+    while (serialPort[i] != '\0'){
+        connectionParameters.serialPort[i] = serialPort[i];
+        i++;
+    }
 
+    connectionParameters.serialPort[i] = serialPort[i];
+    if (role[0] == 't') connectionParameters.role = LlTx;
+    else if (role[0] == 'r') connectionParameters.role = LlRx;
+    connectionParameters.baudRate = baudRate;
+    connectionParameters.nRetransmissions = nTries;
+    connectionParameters.timeout = timeout;
     int fd = llopen(linkLayer);
     if (fd < 0) {
         perror("Connection error\n");
