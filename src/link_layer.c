@@ -115,7 +115,7 @@ int llopen(connectionParameters connectionParameters) {
                                     state = START;
                                 }
                                 break;
-                            case A_REEIVED:
+                            case A_RECEIVED:
                                 if (byte == C_UA) {
                                     state = C_RECEIVED;
                                 }
