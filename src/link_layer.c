@@ -26,11 +26,6 @@ int alarmCount = 0;
 int timeout = 0;
 int retransmitions = 0;
 
-void alarmHandler(int signal) {
-    alarmTriggered = TRUE;
-    alarmCount++;
-}
-
 
 int tramaTransmitter = 0;
 int tramaReceiver = 1;
@@ -41,9 +36,6 @@ int controlFrame(int fd, unsigned char A, unsigned char C){
     unsigned char FRAME[5] = {FLAG, A, C, A ^ C, FLAG};
     return write(fd, FRAME, 5);
 }
-
-
-
 
 int llopen(connectionParameters connectionParameters) {
 
@@ -204,6 +196,7 @@ int llopen(connectionParameters connectionParameters) {
 }
 
 
+
 int llwrite(int fd, const unsigned char *buf, int bufSize) {
 
     int frameSize = 6+bufSize;
@@ -258,13 +251,6 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
                             if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) || byte == C_DISC){
                                 state = C_RECEIVED;
                                 cField = byte;   
-                                 else if(cField == C_REJ(0) || cField == C_REJ(1)) {
-                                    rejected = 1;
-                                }
-                                else if(cField == C_RR(0) || cField == C_RR(1)) {
-                                    accepted = 1;
-                                    tramaTransmitter = (tramaTransmitter+1) % 2;
-                                }
                             }
                             else if (byte == FLAG) state = FLAG_RECEIVED;
                             else state = START;
@@ -286,6 +272,17 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
                 } 
             } 
             
+            if(!cField){
+                continue;
+            }
+            else if(cField == C_REJ(0) || cField == C_REJ(1)) {
+                rejected = 1;
+            }
+            else if(cField == C_RR(0) || cField == C_RR(1)) {
+                accepted = 1;
+                tramaTransmitter = (tramaTransmitter+1) % 2;
+            }
+            else continue;
 
         }
         if (accepted) break;
