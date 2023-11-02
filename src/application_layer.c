@@ -20,7 +20,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
     // Copies parameters
-    LinkLayer connectionParameters;
+    connectionParameters connectionParameters;
     int i = 0;
     while (serialPort[i] != '\0'){
         connectionParameters.serialPort[i] = serialPort[i];
@@ -33,14 +33,14 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     connectionParameters.baudRate = baudRate;
     connectionParameters.nRetransmissions = nTries;
     connectionParameters.timeout = timeout;
-    int fd = llopen(linkLayer);
+    int fd = llopen(connectionParameters);
     
     if (fd < 0) {
         perror("Connection error\n");
         exit(-1);
     }
 
-    switch (linkLayer.role) {
+    switch (connectionParameters.role) {
 
         case LlTx: {
             //Opens file

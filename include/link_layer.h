@@ -18,13 +18,13 @@ typedef enum
 {
    LlTx,
    LlRx,
-} LinkLayerRole;
+} connectionParametersRole;
 
 typedef enum
 {
    START,
    FLAG_RECEIVED,
-   A_RECEIVEDCEIVED,
+   A_SETCEIVED,
    C_RECEIVED,
    BCC1_OK,
    EXIT,
@@ -32,20 +32,20 @@ typedef enum
    PACKET,
    DISCONNECT,
    BCC2_OK
-} LinkLayerState;
+} connectionParametersState;
 
 typedef struct
 {
     char serialPort[50];
-    LinkLayerRole role;
+    connectionParametersRole role;
     int baudRate;
     int nRetransmissions;
     int timeout;
-} LinkLayer;
+} connectionParameters;
 
-// Open a connection using the "port" parameters defined in struct linkLayer.
+// Open a connection using the "port" parameters defined in struct connectionParameters.
 // Return "1" on success or "-1" on error.
-int llopen(LinkLayer connectionParameters);
+int llopen(connectionParameters connectionParameters);
 
 // Send data in buf with size bufSize.
 // Return number of chars written, or "-1" on error.

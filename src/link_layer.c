@@ -37,7 +37,7 @@ int sendSmallFrame(int fd, unsigned char A, unsigned char C){
     return write(fd, FRAME, 5);
 }
 
-int llopen(LinkLayer connectionParameters) {
+int llopen(connectionParameters connectionParameters) {
 
     int fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
     if (fd < 0) {
@@ -80,7 +80,7 @@ int llopen(LinkLayer connectionParameters) {
     timeout = connectionParameters.timeout;
     retransmitions = connectionParameters.nRetransmissions;
 
-    LinkLayerState state = START;
+    connectionParametersState state = START;
 
     switch (connectionParameters.role) {
 
@@ -89,7 +89,7 @@ int llopen(LinkLayer connectionParameters) {
             (void) signal(SIGALRM, alarmHandler);
             while (connectionParameters.nRetransmissions != 0 && state != EXIT) {
                 //sends SET frame
-                sendSmallFrame(fd, A_ER, C_SET);
+                sendSmallFrame(fd, A_SET, C_SET);
 
                 //start Alarm
                 alarm(connectionParameters.timeout);
@@ -107,14 +107,14 @@ int llopen(LinkLayer connectionParameters) {
                                 }
                                 break;
                             case FLAG_RECEIVED:
-                                if (byte == A_RECEIVED) {
-                                    state = A_RECEIVEDCEIVED;
+                                if (byte == A_SET) {
+                                    state = A_SETCEIVED;
                                 }
                                 else if (byte != FLAG) {
                                     state = START;
                                 }
                                 break;
-                            case A_RECEIVEDCEIVED:
+                            case A_SETCEIVED:
                                 if (byte == C_UA) {
                                     state = C_RECEIVED;
                                 }
@@ -126,7 +126,7 @@ int llopen(LinkLayer connectionParameters) {
                                 }
                                 break;
                             case C_RECEIVED:
-                                if (byte == (A_RECEIVED ^ C_UA)) {
+                                if (byte == (A_SET ^ C_UA)) {
                                     state = BCC1_OK;
                                 }
                                 else if (byte == FLAG) {
@@ -166,16 +166,16 @@ int llopen(LinkLayer connectionParameters) {
                             if (byte == FLAG) state = FLAG_RECEIVED;
                             break;
                         case FLAG_RECEIVED:
-                            if (byte == A_ER) state = A_RECEIVEDCEIVED;
+                            if (byte == A_SET) state = A_SETCEIVED;
                             else if (byte != FLAG) state = START;
                             break;
-                        case A_RECEIVEDCEIVED:
+                        case A_SETCEIVED:
                             if (byte == C_SET) state = C_RECEIVED;
                             else if (byte == FLAG) state = FLAG_RECEIVED;
                             else state = START;
                             break;
                         case C_RECEIVED:
-                            if (byte == (A_ER ^ C_SET)) state = BCC1_OK;
+                            if (byte == (A_SET ^ C_SET)) state = BCC1_OK;
                             else if (byte == FLAG) state = FLAG_RECEIVED;
                             else state = START;
                             break;
@@ -188,7 +188,7 @@ int llopen(LinkLayer connectionParameters) {
                     }
                 }
             }  
-            sendSmallFrame(fd, A_RECEIVED, C_UA);
+            sendSmallFrame(fd, A_SET, C_UA);
             break; 
         }
     }
@@ -207,7 +207,7 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
     int frameSize = 6+bufSize;
     unsigned char *frame = (unsigned char *) malloc(frameSize);
     frame[0] = FLAG;
-    frame[1] = A_ER;
+    frame[1] = A_SET;
     frame[2] = C_N(tramaTransmitter);
     frame[3] = frame[1] ^frame[2];
     memcpy(frame+4,buf, bufSize);
@@ -267,7 +267,7 @@ int llread(int fd, unsigned char *packet) {
 
     unsigned char byte, cField;
     int i = 0;
-    LinkLayerState state = START;
+    connectionParametersState state = START;
 
     while (state != EXIT) {  
         if (read(fd, &byte, 1) > 0) {
@@ -276,23 +276,23 @@ int llread(int fd, unsigned char *packet) {
                     if (byte == FLAG) state = FLAG_RECEIVED;
                     break;
                 case FLAG_RECEIVED:
-                    if (byte == A_ER) state = A_RECEIVEDCEIVED;
+                    if (byte == A_SET) state = A_SETCEIVED;
                     else if (byte != FLAG) state = START;
                     break;
-                case A_RECEIVEDCEIVED:
+                case A_SETCEIVED:
                     if (byte == C_N(0) || byte == C_N(1)){
                         state = C_RECEIVED;
                         cField = byte;   
                     }
                     else if (byte == FLAG) state = FLAG_RECEIVED;
                     else if (byte == C_DISC) {
-                        sendSmallFrame(fd, A_RECEIVED, C_DISC);
+                        sendSmallFrame(fd, A_SET, C_DISC);
                         return 0;
                     }
                     else state = START;
                     break;
                 case C_RECEIVED:
-                    if (byte == (A_ER ^ cField)) state = PACKET;
+                    if (byte == (A_SET ^ cField)) state = PACKET;
                     else if (byte == FLAG) state = FLAG_RECEIVED;
                     else state = START;
                     break;
@@ -309,13 +309,13 @@ int llread(int fd, unsigned char *packet) {
 
                         if (bcc2 == acc){
                             state = EXIT;
-                            sendSmallFrame(fd, A_RECEIVED, C_RR(tramaReceiver));
+                            sendSmallFrame(fd, A_SET, C_RR(tramaReceiver));
                             tramaReceiver = (tramaReceiver + 1)%2;
                             return i; 
                         }
                         else{
                             printf("Error: retransmition\n");
-                            sendSmallFrame(fd, A_RECEIVED, C_REJ(tramaReceiver));
+                            sendSmallFrame(fd, A_SET, C_REJ(tramaReceiver));
                             return -1;
                         };
 
@@ -342,13 +342,13 @@ int llread(int fd, unsigned char *packet) {
 
 int llclose(int fd){
 
-    LinkLayerState state = START;
+    connectionParametersState state = START;
     unsigned char byte;
     (void) signal(SIGALRM, alarmHandler);
     
     while (retransmitions != 0 && state != EXIT) {
                 
-        sendSmallFrame(fd, A_ER, C_DISC);
+        sendSmallFrame(fd, A_SET, C_DISC);
         alarm(timeout);
         alarmTriggered = FALSE;
                 
@@ -359,16 +359,16 @@ int llclose(int fd){
                         if (byte == FLAG) state = FLAG_RECEIVED;
                         break;
                     case FLAG_RECEIVED:
-                        if (byte == A_RECEIVED) state = A_RECEIVEDCEIVED;
+                        if (byte == A_SET) state = A_SETCEIVED;
                         else if (byte != FLAG) state = START;
                         break;
-                    case A_RECEIVEDCEIVED:
+                    case A_SETCEIVED:
                         if (byte == C_DISC) state = C_RECEIVED;
                         else if (byte == FLAG) state = FLAG_RECEIVED;
                         else state = START;
                         break;
                     case C_RECEIVED:
-                        if (byte == (A_RECEIVED ^ C_DISC)) state = BCC1_OK;
+                        if (byte == (A_SET ^ C_DISC)) state = BCC1_OK;
                         else if (byte == FLAG) state = FLAG_RECEIVED;
                         else state = START;
                         break;
@@ -385,26 +385,26 @@ int llclose(int fd){
     }
 
     if (state != EXIT) return -1;
-    sendSmallFrame(fd, A_ER, C_UA);
+    sendSmallFrame(fd, A_SET, C_UA);
     return close(fd);
 }
 
 unsigned char readControlFrame(int fd){
 
     unsigned char byte, cField = 0;
-    LinkLayerState state = START;
+    connectionParametersState state = START;
     
-    while (state != EXIT && alarmTriggered == FALSE) {  
+    while (state != EXIT && alarmTriggere d == FALSE) {  
         if (read(fd, &byte, 1) > 0 || 1) {
             switch (state) {
                 case START:
                     if (byte == FLAG) state = FLAG_RECEIVED;
                     break;
                 case FLAG_RECEIVED:
-                    if (byte == A_RECEIVED) state = A_RECEIVEDCEIVED;
+                    if (byte == A_SET) state = A_SETCEIVED;
                     else if (byte != FLAG) state = START;
                     break;
-                case A_RECEIVEDCEIVED:
+                case A_SETCEIVED:
                     if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) || byte == C_DISC){
                         state = C_RECEIVED;
                         cField = byte;   
@@ -413,7 +413,7 @@ unsigned char readControlFrame(int fd){
                     else state = START;
                     break;
                 case C_RECEIVED:
-                    if (byte == (A_RECEIVED ^ cField)) state = BCC1_OK;
+                    if (byte == (A_SET ^ cField)) state = BCC1_OK;
                     else if (byte == FLAG) state = FLAG_RECEIVED;
                     else state = START;
                     break;
