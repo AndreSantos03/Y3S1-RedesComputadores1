@@ -104,7 +104,7 @@ int llopen(connectionParameters connectionParameters) {
 
                 //STATE MACHINE
                 while (state != EXIT && alarmTriggered == FALSE) {
-                    int bytes = read(fd, &byte, 1) > 0;
+                    int bytes = read(fd, &byte, 1);
                     if (bytes > 0) {
                         switch (state) {
                             case START:
