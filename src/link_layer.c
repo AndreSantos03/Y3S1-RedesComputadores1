@@ -114,13 +114,13 @@ int llopen(connectionParameters connectionParameters) {
                                 break;
                             case FLAG_RECEIVED:
                                 if (byte == A_SET) {
-                                    state = A_SETCEIVED;
+                                    state = A_RECEIVED;
                                 }
                                 else if (byte != FLAG) {
                                     state = START;
                                 }
                                 break;
-                            case A_SETCEIVED:
+                            case A_REEIVED:
                                 if (byte == C_UA) {
                                     state = C_RECEIVED;
                                 }
@@ -175,13 +175,13 @@ int llopen(connectionParameters connectionParameters) {
                             break;
                         case FLAG_RECEIVED:
                             if (byte == A_SET) {
-                                state = A_SETCEIVED;
+                                state = A_RECEIVED;
                             }
                             else if (byte != FLAG) {
                                 state = START;
                             }
                             break;
-                        case A_SETCEIVED:
+                        case A_RECEIVED:
                             if (byte == C_SET) {
                                 state = C_RECEIVED;
                             }
@@ -305,10 +305,10 @@ int llread(int fd, unsigned char *packet) {
                     if (byte == FLAG) state = FLAG_RECEIVED;
                     break;
                 case FLAG_RECEIVED:
-                    if (byte == A_SET) state = A_SETCEIVED;
+                    if (byte == A_SET) state = A_RECEIVED;
                     else if (byte != FLAG) state = START;
                     break;
-                case A_SETCEIVED:
+                case A_RECEIVED:
                     if (byte == C_N(0) || byte == C_N(1)){
                         state = C_RECEIVED;
                         cField = byte;   
@@ -388,10 +388,10 @@ int llclose(int fd){
                         if (byte == FLAG) state = FLAG_RECEIVED;
                         break;
                     case FLAG_RECEIVED:
-                        if (byte == A_SET) state = A_SETCEIVED;
+                        if (byte == A_SET) state = A_RECEIVED;
                         else if (byte != FLAG) state = START;
                         break;
-                    case A_SETCEIVED:
+                    case A_RECEIVED:
                         if (byte == C_DISC) state = C_RECEIVED;
                         else if (byte == FLAG) state = FLAG_RECEIVED;
                         else state = START;
@@ -422,7 +422,7 @@ int llclose(int fd){
 unsigned char readControlFrame(int fd){
 
     unsigned char byte, cField = 0;
-    LinkLayerState state = START;
+    connectionParametersState state = START;
     
     while (state != EXIT && alarmTriggered == FALSE) {  
         if (read(fd, &byte, 1) > 0 || 1) {
