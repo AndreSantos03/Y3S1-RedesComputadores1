@@ -318,7 +318,7 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
                         if(responseAccepted){
                             free(frame);
                             break;
-                            return frameSize
+                            return frameSize;
                         }
                     }
                 } 
