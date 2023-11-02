@@ -24,7 +24,7 @@ typedef enum
 {
    START,
    FLAG_RECEIVED,
-   A_SETCEIVED,
+   A_RECEIVED,
    C_RECEIVED,
    BCC1_OK,
    EXIT,

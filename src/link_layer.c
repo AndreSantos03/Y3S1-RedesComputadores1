@@ -275,7 +275,7 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
             }
             else if(result == C_RR(0) || result == C_RR(1)) {
                 accepted = 1;
-                tramaTx = (tramaTx+1) % 2;
+                tramaTransmitter = (tramaTransmitter+1) % 2;
             }
             else continue;
 
@@ -424,32 +424,32 @@ unsigned char readControlFrame(int fd){
     unsigned char byte, cField = 0;
     LinkLayerState state = START;
     
-    while (state != STOP_R && alarmTriggered == FALSE) {  
+    while (state != EXIT && alarmTriggered == FALSE) {  
         if (read(fd, &byte, 1) > 0 || 1) {
             switch (state) {
                 case START:
-                    if (byte == FLAG) state = FLAG_RCV;
+                    if (byte == FLAG) state = FLAG_RECEIVED;
                     break;
-                case FLAG_RCV:
-                    if (byte == A_RE) state = A_RCV;
+                case FLAG_RECEIVED:
+                    if (byte == A_UA) state = A_RECEIVED;
                     else if (byte != FLAG) state = START;
                     break;
-                case A_RCV:
+                case A_RECEIVED:
                     if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) || byte == C_DISC){
-                        state = C_RCV;
+                        state = C_RECEIVED;
                         cField = byte;   
                     }
-                    else if (byte == FLAG) state = FLAG_RCV;
+                    else if (byte == FLAG) state = FLAG_RECEIVED;
                     else state = START;
                     break;
-                case C_RCV:
-                    if (byte == (A_RE ^ cField)) state = BCC1_OK;
-                    else if (byte == FLAG) state = FLAG_RCV;
+                case C_RECEIVED:
+                    if (byte == (A_UA ^ cField)) state = BCC1_OK;
+                    else if (byte == FLAG) state = FLAG_RECEIVED;
                     else state = START;
                     break;
                 case BCC1_OK:
                     if (byte == FLAG){
-                        state = STOP_R;
+                        state = EXIT;
                     }
                     else state = START;
                     break;
