@@ -140,6 +140,8 @@ int main(int argc, char *argv[])
 
                 int bytesToRx = write(fdRx, tx2rx, bytesFromTx);
                 printf("bytesFromTx=%d > bytesToRx=%d\n", bytesFromTx, bytesToRx);
+                //if(bytesFromTx < 30) for(unsigned int i = 0; i < bytesFromTx; i++) printf("%02X ", tx2rx[i]);
+                //printf("\n");
             }
         }
 
@@ -161,6 +163,8 @@ int main(int argc, char *argv[])
 
                 int bytesToTx = write(fdTx, rx2tx, bytesFromRx);
                 printf("bytesToTx=%d < bytesFromRx=%d\n", bytesToTx, bytesFromRx);
+                //if(bytesFromRx < 30) for(unsigned int i = 0; i < bytesFromRx; i++) printf("%02X ", rx2tx[i]);
+                //printf("\n");
             }
         }
 
