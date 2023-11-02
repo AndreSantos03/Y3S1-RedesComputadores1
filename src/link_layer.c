@@ -33,107 +33,16 @@ int tramaReceiver = 1;
 
 int STOP = FALSE;
 
-int llopen(LinkLayer connectionParameters) {
-    
-    LinkLayerState state = START;
-    int fd = connection(connectionParameters.serialPort);
-    if (fd < 0) return -1;
-
-    unsigned char byte;
-    timeout = connectionParameters.timeout;
-    retransmitions = connectionParameters.nRetransmissions;
-    switch (connectionParameters.role) {
-
-        case LlTx: {
-
-            (void) signal(SIGALRM, alarmHandler);
-            while (connectionParameters.nRetransmissions != 0 && state != EXIT) {
-                
-                sendSupervisionFrame(fd, A_ER, C_SET);
-                alarm(connectionParameters.timeout);
-                alarmTriggered = FALSE;
-                
-                while (alarmTriggered == FALSE && state != EXIT) {
-                    if (read(fd, &byte, 1) > 0) {
-                        switch (state) {
-                            case START:
-                                if (byte == FLAG) state = FLAG_RECEIVED;
-                                break;
-                            case FLAG_RECEIVED:
-                                if (byte == A_RE) state = A_RECEIVED;
-                                else if (byte != FLAG) state = START;
-                                break;
-                            case A_RECEIVED:
-                                if (byte == C_UA) state = C_RECEIVED;
-                                else if (byte == FLAG) state = FLAG_RECEIVED;
-                                else state = START;
-                                break;
-                            case C_RECEIVED:
-                                if (byte == (A_RE ^ C_UA)) state = BCC1_OK;
-                                else if (byte == FLAG) state = FLAG_RECEIVED;
-                                else state = START;
-                                break;
-                            case BCC1_OK:
-                                if (byte == FLAG) state = EXIT;
-                                else state = START;
-                                break;
-                            default: 
-                                break;
-                        }
-                    }
-                } 
-                connectionParameters.nRetransmissions--;
-            }
-            if (state != EXIT) return -1;
-            break;  
-        }
-
-        case LlRx: {
-
-            while (state != EXIT) {
-                if (read(fd, &byte, 1) > 0) {
-                    switch (state) {
-                        case START:
-                            if (byte == FLAG) state = FLAG_RECEIVED;
-                            break;
-                        case FLAG_RECEIVED:
-                            if (byte == A_ER) state = A_RECEIVED;
-                            else if (byte != FLAG) state = START;
-                            break;
-                        case A_RECEIVED:
-                            if (byte == C_SET) state = C_RECEIVED;
-                            else if (byte == FLAG) state = FLAG_RECEIVED;
-                            else state = START;
-                            break;
-                        case C_RECEIVED:
-                            if (byte == (A_ER ^ C_SET)) state = BCC1_OK;
-                            else if (byte == FLAG) state = FLAG_RECEIVED;
-                            else state = START;
-                            break;
-                        case BCC1_OK:
-                            if (byte == FLAG) state = EXIT;
-                            else state = START;
-                            break;
-                        default: 
-                            break;
-                    }
-                }
-            }  
-            sendSupervisionFrame(fd, A_RE, C_UA);
-            break; 
-        }
-        default:
-            return -1;
-            break;
-    }
-    return fd;
+int sendSmallFrame(int fd, unsigned char A, unsigned char C){
+    unsigned char FRAME[5] = {FLAG, A, C, A ^ C, FLAG};
+    return write(fd, FRAME, 5);
 }
 
-int connection(const char *serialPort) {
+int llopen(LinkLayer connectionParameters) {
 
-    int fd = open(serialPort, O_RDWR | O_NOCTTY);
+    int fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
     if (fd < 0) {
-        perror(serialPort);
+        perror(connectionParameters.serialPort);
         return -1; 
     }
 
@@ -162,8 +71,132 @@ int connection(const char *serialPort) {
         return -1;
     }
 
+    
+    if (fd < 0) {
+        printf("Couldnt't establish connection!\n");
+        return -1;
+    }
+
+    unsigned char byte;
+    timeout = connectionParameters.timeout;
+    retransmitions = connectionParameters.nRetransmissions;
+
+    LinkLayerState state = START;
+
+    switch (connectionParameters.role) {
+
+        case LlTx: {
+
+            (void) signal(SIGALRM, alarmHandler);
+            while (connectionParameters.nRetransmissions != 0 && state != EXIT) {
+                //sends SET frame
+                sendSmallFrame(fd, A_ER, C_SET);
+
+                //start Alarm
+                alarm(connectionParameters.timeout);
+                alarmTriggered = FALSE;
+                
+
+                //STATE MACHINE
+                while (state != EXIT && alarmTriggered == FALSE) {
+                    int bytes = read(fd, &byte, 1) > 0;
+                    if (bytes > 0) {
+                        switch (state) {
+                            case START:
+                                if (byte == FLAG) {
+                                    state = FLAG_RECEIVED;
+                                }
+                                break;
+                            case FLAG_RECEIVED:
+                                if (byte == A_RE) {
+                                    state = A_RECEIVED;
+                                }
+                                else if (byte != FLAG) {
+                                    state = START;
+                                }
+                                break;
+                            case A_RECEIVED:
+                                if (byte == C_UA) {
+                                    state = C_RECEIVED;
+                                }
+                                else if (byte == FLAG) {
+                                    state = FLAG_RECEIVED;
+                                }
+                                else {
+                                    state = START;
+                                }
+                                break;
+                            case C_RECEIVED:
+                                if (byte == (A_RE ^ C_UA)) {
+                                    state = BCC1_OK;
+                                }
+                                else if (byte == FLAG) {
+                                    state = FLAG_RECEIVED;
+                                }
+                                else {
+                                    state = START;
+                                }
+                                break;
+                            case BCC1_OK:
+                                if (byte == FLAG) {
+                                    state = EXIT;
+                                }
+                                else {
+                                    state = START;
+                                }
+                                break;
+                            default: 
+                                break;
+                        }
+                    }
+                } 
+                connectionParameters.nRetransmissions--;
+            }
+            if (state != EXIT) return -1;
+            break;  
+        }
+
+        case LlRx: {
+            //doesnt't need alarm
+            //STATE MACHINE
+            while (state != EXIT) {
+                int bytes = read(fd, &byte, 1);
+                if (bytes > 0) {
+                    switch (state) {
+                        case START:
+                            if (byte == FLAG) state = FLAG_RECEIVED;
+                            break;
+                        case FLAG_RECEIVED:
+                            if (byte == A_ER) state = A_RECEIVED;
+                            else if (byte != FLAG) state = START;
+                            break;
+                        case A_RECEIVED:
+                            if (byte == C_SET) state = C_RECEIVED;
+                            else if (byte == FLAG) state = FLAG_RECEIVED;
+                            else state = START;
+                            break;
+                        case C_RECEIVED:
+                            if (byte == (A_ER ^ C_SET)) state = BCC1_OK;
+                            else if (byte == FLAG) state = FLAG_RECEIVED;
+                            else state = START;
+                            break;
+                        case BCC1_OK:
+                            if (byte == FLAG) state = EXIT;
+                            else state = START;
+                            break;
+                        default: 
+                            break;
+                    }
+                }
+            }  
+            sendSmallFrame(fd, A_RE, C_UA);
+            break; 
+        }
+    }
     return fd;
 }
+
+
 
 void alarmHandler(int signal) {
     alarmTriggered = TRUE;
@@ -254,7 +287,7 @@ int llread(int fd, unsigned char *packet) {
                     }
                     else if (byte == FLAG) state = FLAG_RECEIVED;
                     else if (byte == C_DISC) {
-                        sendSupervisionFrame(fd, A_RE, C_DISC);
+                        sendSmallFrame(fd, A_RE, C_DISC);
                         return 0;
                     }
                     else state = START;
@@ -277,13 +310,13 @@ int llread(int fd, unsigned char *packet) {
 
                         if (bcc2 == acc){
                             state = EXIT;
-                            sendSupervisionFrame(fd, A_RE, C_RR(tramaReceiver));
+                            sendSmallFrame(fd, A_RE, C_RR(tramaReceiver));
                             tramaReceiver = (tramaReceiver + 1)%2;
                             return i; 
                         }
                         else{
                             printf("Error: retransmition\n");
-                            sendSupervisionFrame(fd, A_RE, C_REJ(tramaReceiver));
+                            sendSmallFrame(fd, A_RE, C_REJ(tramaReceiver));
                             return -1;
                         };
 
@@ -316,7 +349,7 @@ int llclose(int fd){
     
     while (retransmitions != 0 && state != EXIT) {
                 
-        sendSupervisionFrame(fd, A_ER, C_DISC);
+        sendSmallFrame(fd, A_ER, C_DISC);
         alarm(timeout);
         alarmTriggered = FALSE;
                 
@@ -353,7 +386,7 @@ int llclose(int fd){
     }
 
     if (state != EXIT) return -1;
-    sendSupervisionFrame(fd, A_ER, C_UA);
+    sendSmallFrame(fd, A_ER, C_UA);
     return close(fd);
 }
 
@@ -397,9 +430,4 @@ unsigned char readControlFrame(int fd){
         } 
     } 
     return cField;
-}
-
-int sendSupervisionFrame(int fd, unsigned char A, unsigned char C){
-    unsigned char FRAME[5] = {FLAG, A, C, A ^ C, FLAG};
-    return write(fd, FRAME, 5);
 }

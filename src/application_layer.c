@@ -16,7 +16,7 @@
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
-    // GET CONNECTION PARAMETERS
+    // Copies parameters
     LinkLayer connectionParameters;
     int i = 0;
     while (serialPort[i] != '\0'){
@@ -31,6 +31,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     connectionParameters.nRetransmissions = nTries;
     connectionParameters.timeout = timeout;
     int fd = llopen(linkLayer);
+    
     if (fd < 0) {
         perror("Connection error\n");
         exit(-1);
@@ -39,10 +40,10 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     switch (linkLayer.role) {
 
         case LlTx: {
-            
+            //Opens file
             FILE* file = fopen(filename, "rb");
             if (file == NULL) {
-                perror("File not found\n");
+                perror("File not found!");
                 exit(-1);
             }
 
@@ -51,6 +52,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             long int fileSize = ftell(file)-prev;
             fseek(file,prev,SEEK_SET);
 
+                
             unsigned int cpSize;
             unsigned char *controlPacketStart = getControlPacket(2, filename, fileSize, &cpSize);
             if(llwrite(fd, controlPacketStart, cpSize) == -1){ 
