@@ -81,7 +81,7 @@ int llopen(connectionParameters connectionParameters) {
     timeout = connectionParameters.timeout;
     retransmitions = connectionParameters.nRetransmissions;
 
-    connectionParametersState state = START;
+    machineStates state = START;
 
     switch (connectionParameters.role) {
 
@@ -291,7 +291,7 @@ int llread(int fd, unsigned char *packet) {
 
     unsigned char byte, cField;
     int i = 0;
-    connectionParametersState state = START;
+    machineStates state = START;
 
     while (state != EXIT) {  
         if (read(fd, &byte, 1) > 0) {
@@ -366,7 +366,7 @@ int llread(int fd, unsigned char *packet) {
 
 int llclose(int fd){
 
-    connectionParametersState state = START;
+    machineStates state = START;
     unsigned char byte;
     (void) signal(SIGALRM, alarmHandler);
     
@@ -417,7 +417,7 @@ int llclose(int fd){
 unsigned char readControlFrame(int fd){
 
     unsigned char byte, cField = 0;
-    connectionParametersState state = START;
+    machineStates state = START;
     
     while (state != EXIT && alarmTriggered == FALSE) {  
         if (read(fd, &byte, 1) > 0 || 1) {

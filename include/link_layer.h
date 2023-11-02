@@ -32,7 +32,7 @@ typedef enum
    PACKET,
    DISCONNECT,
    BCC2_OK
-} connectionParametersState;
+} machineStates;
 
 typedef struct
 {
