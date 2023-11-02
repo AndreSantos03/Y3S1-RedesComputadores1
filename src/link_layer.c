@@ -26,6 +26,11 @@ int alarmCount = 0;
 int timeout = 0;
 int retransmitions = 0;
 
+void alarmHandler(int signal) {
+    alarmTriggered = TRUE;
+    alarmCount++;
+}
+
 
 int tramaTransmitter = 0;
 int tramaReceiver = 1;
@@ -36,6 +41,9 @@ int controlFrame(int fd, unsigned char A, unsigned char C){
     unsigned char FRAME[5] = {FLAG, A, C, A ^ C, FLAG};
     return write(fd, FRAME, 5);
 }
+
+
+
 
 int llopen(connectionParameters connectionParameters) {
 
@@ -196,12 +204,6 @@ int llopen(connectionParameters connectionParameters) {
 }
 
 
-
-void alarmHandler(int signal) {
-    alarmTriggered = TRUE;
-    alarmCount++;
-}
-
 int llwrite(int fd, const unsigned char *buf, int bufSize) {
 
     int frameSize = 6+bufSize;
@@ -277,13 +279,10 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
                 } 
             } 
             
-            if(!result){
-                continue;
-            }
-            else if(result == C_REJ(0) || result == C_REJ(1)) {
+            else if(cField == C_REJ(0) || cField == C_REJ(1)) {
                 rejected = 1;
             }
-            else if(result == C_RR(0) || result == C_RR(1)) {
+            else if(cField == C_RR(0) || cField == C_RR(1)) {
                 accepted = 1;
                 tramaTransmitter = (tramaTransmitter+1) % 2;
             }
