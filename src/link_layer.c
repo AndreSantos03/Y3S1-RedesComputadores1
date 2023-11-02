@@ -269,8 +269,9 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
             connectionParametersState state = START;
 
             //STATE MACHINE
-            while (state != EXIT && alarmTriggered == FALSE) {  
-                if (read(fd, &byte, 1) > 0 || 1) {
+            while (state != EXIT && alarmTriggered == FALSE) {
+                int bytes = read(fd, &byte, 1);
+                if ( bytes > 0) {
                     switch (state) {
                         case START:
                             if (byte == FLAG) state = FLAG_RECEIVED;
