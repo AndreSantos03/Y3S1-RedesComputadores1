@@ -169,7 +169,7 @@ int llopen(connectionParameters connectionParameters) {
                 if (bytes > 0) {
                     switch (state) {
                         case START:
-                            if (byte == FLAG) if{
+                            if (byte == FLAG){
                                 state = FLAG_RECEIVED;
                             }
                             break;
@@ -255,10 +255,8 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
     int currentTransmition = 0;
 
     while (currentTransmition < retransmitions) { 
-    
         int rejReceived = 0;
         int responseAccepted = 0;
-
         alarmTriggered = FALSE;
         alarm(timeout);
         
@@ -282,7 +280,7 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
                             else if (byte != FLAG) state = START;
                             break;
                         case A_SETCEIVED:
-                            if(byte == C_REJ(0) || bute == C_REJ(1)){
+                            if(byte == C_REJ(0) || byte == C_REJ(1)){
                                 //RECEIVED REJECT MESSAGE
                                 rejReceived = 1;
                                 state = C_RECEIVED;
@@ -317,24 +315,20 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
                             break;
                         default: 
                             break;
+                        if(responseAccepted){
+                            free(frame);
+                            break;
+                            return frameSize
+                        }
                     }
                 } 
             } 
-            if(responseAccepted){
-                currentTransmition++
-            }
-
+            currentTransmition++;
         }
     }
-    //clears the space allocated for frame
-    free(frame);
-    if(responseAccepted) {
-        return frameSize;
-    }
-    else{
-        llclose(fd);
-        return -1;
-    }
+
+    llclose(fd);
+    return -1;
 }
 
 int llread(int fd, unsigned char *packet) {
