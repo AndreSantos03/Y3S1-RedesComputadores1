@@ -32,7 +32,7 @@ int tramaReceiver = 1;
 
 int STOP = FALSE;
 
-int sendSmallFrame(int fd, unsigned char A, unsigned char C){
+int controlFrame(int fd, unsigned char A, unsigned char C){
     unsigned char FRAME[5] = {FLAG, A, C, A ^ C, FLAG};
     return write(fd, FRAME, 5);
 }
@@ -89,7 +89,7 @@ int llopen(connectionParameters connectionParameters) {
             (void) signal(SIGALRM, alarmHandler);
             while (connectionParameters.nRetransmissions != 0 && state != EXIT) {
                 //sends SET frame
-                sendSmallFrame(fd, A_SET, C_SET);
+                controlFrame(fd, A_SET, C_SET);
 
                 //start Alarm
                 alarm(connectionParameters.timeout);
@@ -188,7 +188,7 @@ int llopen(connectionParameters connectionParameters) {
                     }
                 }
             }  
-            sendSmallFrame(fd, A_SET, C_UA);
+            controlFrame(fd, A_SET, C_UA);
             break; 
         }
     }
@@ -236,7 +236,46 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
         while (alarmTriggered == FALSE && !rejected && !accepted) {
 
             write(fd, frame, j);
-            unsigned char result = readControlFrame(fd);
+
+            unsigned char byte, cField = 0;
+
+            connectionParametersState state = START;
+
+            //STATE MACHINE
+            while (state != EXIT && alarmTriggered == FALSE) {  
+                if (read(fd, &byte, 1) > 0 || 1) {
+                    switch (state) {
+                        case START:
+                            if (byte == FLAG) state = FLAG_RECEIVED;
+                            break;
+                        case FLAG_RECEIVED:
+                            if (byte == A_SET) state = A_SETCEIVED;
+                            else if (byte != FLAG) state = START;
+                            break;
+                        case A_SETCEIVED:
+                            if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) || byte == C_DISC){
+                                state = C_RECEIVED;
+                                cField = byte;   
+                            }
+                            else if (byte == FLAG) state = FLAG_RECEIVED;
+                            else state = START;
+                            break;
+                        case C_RECEIVED:
+                            if (byte == (A_SET ^ cField)) state = BCC1_OK;
+                            else if (byte == FLAG) state = FLAG_RECEIVED;
+                            else state = START;
+                            break;
+                        case BCC1_OK:
+                            if (byte == FLAG){
+                                state = EXIT;
+                            }
+                            else state = START;
+                            break;
+                        default: 
+                            break;
+                    }
+                } 
+            } 
             
             if(!result){
                 continue;
@@ -286,7 +325,7 @@ int llread(int fd, unsigned char *packet) {
                     }
                     else if (byte == FLAG) state = FLAG_RECEIVED;
                     else if (byte == C_DISC) {
-                        sendSmallFrame(fd, A_SET, C_DISC);
+                        controlFrame(fd, A_SET, C_DISC);
                         return 0;
                     }
                     else state = START;
@@ -309,13 +348,13 @@ int llread(int fd, unsigned char *packet) {
 
                         if (bcc2 == acc){
                             state = EXIT;
-                            sendSmallFrame(fd, A_SET, C_RR(tramaReceiver));
+                            controlFrame(fd, A_SET, C_RR(tramaReceiver));
                             tramaReceiver = (tramaReceiver + 1)%2;
                             return i; 
                         }
                         else{
                             printf("Error: retransmition\n");
-                            sendSmallFrame(fd, A_SET, C_REJ(tramaReceiver));
+                            controlFrame(fd, A_SET, C_REJ(tramaReceiver));
                             return -1;
                         };
 
@@ -348,7 +387,7 @@ int llclose(int fd){
     
     while (retransmitions != 0 && state != EXIT) {
                 
-        sendSmallFrame(fd, A_SET, C_DISC);
+        controlFrame(fd, A_SET, C_DISC);
         alarm(timeout);
         alarmTriggered = FALSE;
                 
@@ -385,48 +424,6 @@ int llclose(int fd){
     }
 
     if (state != EXIT) return -1;
-    sendSmallFrame(fd, A_SET, C_UA);
+    controlFrame(fd, A_SET, C_UA);
     return close(fd);
-}
-
-unsigned char readControlFrame(int fd){
-
-    unsigned char byte, cField = 0;
-    connectionParametersState state = START;
-    
-    while (state != EXIT && alarmTriggered == FALSE) {  
-        if (read(fd, &byte, 1) > 0 || 1) {
-            switch (state) {
-                case START:
-                    if (byte == FLAG) state = FLAG_RECEIVED;
-                    break;
-                case FLAG_RECEIVED:
-                    if (byte == A_SET) state = A_SETCEIVED;
-                    else if (byte != FLAG) state = START;
-                    break;
-                case A_SETCEIVED:
-                    if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) || byte == C_DISC){
-                        state = C_RECEIVED;
-                        cField = byte;   
-                    }
-                    else if (byte == FLAG) state = FLAG_RECEIVED;
-                    else state = START;
-                    break;
-                case C_RECEIVED:
-                    if (byte == (A_SET ^ cField)) state = BCC1_OK;
-                    else if (byte == FLAG) state = FLAG_RECEIVED;
-                    else state = START;
-                    break;
-                case BCC1_OK:
-                    if (byte == FLAG){
-                        state = EXIT;
-                    }
-                    else state = START;
-                    break;
-                default: 
-                    break;
-            }
-        } 
-    } 
-    return cField;
 }

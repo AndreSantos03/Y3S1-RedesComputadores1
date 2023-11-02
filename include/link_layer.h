@@ -68,6 +68,6 @@ void alarmHandler(int signal);
 
 unsigned char readControlFrame (int fd);
 
-int sendSmallFrame(int fd, unsigned char A, unsigned char C);
+int controlFrame(int fd, unsigned char A, unsigned char C);
 
 #endif // _LINK_LAYER_H_
