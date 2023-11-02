@@ -394,7 +394,7 @@ unsigned char readControlFrame(int fd){
     unsigned char byte, cField = 0;
     connectionParametersState state = START;
     
-    while (state != EXIT && alarmTriggere d == FALSE) {  
+    while (state != EXIT && alarmTriggered == FALSE) {  
         if (read(fd, &byte, 1) > 0 || 1) {
             switch (state) {
                 case START:
