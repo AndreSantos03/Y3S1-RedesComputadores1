@@ -5,7 +5,6 @@
 
 #define _POSIX_SOURCE 1
 #define BAUDRATE 38400
-#define MAX_PAYLOAD_SIZE 1000
 
 #define BUF_SIZE 256
 #define FALSE 0
@@ -108,14 +107,14 @@ int llopen(LinkLayer connectionParameters) {
                                 }
                                 break;
                             case FLAG_RECEIVED:
-                                if (byte == A_RE) {
-                                    state = A_RECEIVED;
+                                if (byte == A_RECEIVED) {
+                                    state = A_RECEIVEDCEIVED;
                                 }
                                 else if (byte != FLAG) {
                                     state = START;
                                 }
                                 break;
-                            case A_RECEIVED:
+                            case A_RECEIVEDCEIVED:
                                 if (byte == C_UA) {
                                     state = C_RECEIVED;
                                 }
@@ -127,7 +126,7 @@ int llopen(LinkLayer connectionParameters) {
                                 }
                                 break;
                             case C_RECEIVED:
-                                if (byte == (A_RE ^ C_UA)) {
+                                if (byte == (A_RECEIVED ^ C_UA)) {
                                     state = BCC1_OK;
                                 }
                                 else if (byte == FLAG) {
@@ -167,10 +166,10 @@ int llopen(LinkLayer connectionParameters) {
                             if (byte == FLAG) state = FLAG_RECEIVED;
                             break;
                         case FLAG_RECEIVED:
-                            if (byte == A_ER) state = A_RECEIVED;
+                            if (byte == A_ER) state = A_RECEIVEDCEIVED;
                             else if (byte != FLAG) state = START;
                             break;
-                        case A_RECEIVED:
+                        case A_RECEIVEDCEIVED:
                             if (byte == C_SET) state = C_RECEIVED;
                             else if (byte == FLAG) state = FLAG_RECEIVED;
                             else state = START;
@@ -189,7 +188,7 @@ int llopen(LinkLayer connectionParameters) {
                     }
                 }
             }  
-            sendSmallFrame(fd, A_RE, C_UA);
+            sendSmallFrame(fd, A_RECEIVED, C_UA);
             break; 
         }
     }
@@ -277,17 +276,17 @@ int llread(int fd, unsigned char *packet) {
                     if (byte == FLAG) state = FLAG_RECEIVED;
                     break;
                 case FLAG_RECEIVED:
-                    if (byte == A_ER) state = A_RECEIVED;
+                    if (byte == A_ER) state = A_RECEIVEDCEIVED;
                     else if (byte != FLAG) state = START;
                     break;
-                case A_RECEIVED:
+                case A_RECEIVEDCEIVED:
                     if (byte == C_N(0) || byte == C_N(1)){
                         state = C_RECEIVED;
                         cField = byte;   
                     }
                     else if (byte == FLAG) state = FLAG_RECEIVED;
                     else if (byte == C_DISC) {
-                        sendSmallFrame(fd, A_RE, C_DISC);
+                        sendSmallFrame(fd, A_RECEIVED, C_DISC);
                         return 0;
                     }
                     else state = START;
@@ -310,13 +309,13 @@ int llread(int fd, unsigned char *packet) {
 
                         if (bcc2 == acc){
                             state = EXIT;
-                            sendSmallFrame(fd, A_RE, C_RR(tramaReceiver));
+                            sendSmallFrame(fd, A_RECEIVED, C_RR(tramaReceiver));
                             tramaReceiver = (tramaReceiver + 1)%2;
                             return i; 
                         }
                         else{
                             printf("Error: retransmition\n");
-                            sendSmallFrame(fd, A_RE, C_REJ(tramaReceiver));
+                            sendSmallFrame(fd, A_RECEIVED, C_REJ(tramaReceiver));
                             return -1;
                         };
 
@@ -360,16 +359,16 @@ int llclose(int fd){
                         if (byte == FLAG) state = FLAG_RECEIVED;
                         break;
                     case FLAG_RECEIVED:
-                        if (byte == A_RE) state = A_RECEIVED;
+                        if (byte == A_RECEIVED) state = A_RECEIVEDCEIVED;
                         else if (byte != FLAG) state = START;
                         break;
-                    case A_RECEIVED:
+                    case A_RECEIVEDCEIVED:
                         if (byte == C_DISC) state = C_RECEIVED;
                         else if (byte == FLAG) state = FLAG_RECEIVED;
                         else state = START;
                         break;
                     case C_RECEIVED:
-                        if (byte == (A_RE ^ C_DISC)) state = BCC1_OK;
+                        if (byte == (A_RECEIVED ^ C_DISC)) state = BCC1_OK;
                         else if (byte == FLAG) state = FLAG_RECEIVED;
                         else state = START;
                         break;
@@ -402,10 +401,10 @@ unsigned char readControlFrame(int fd){
                     if (byte == FLAG) state = FLAG_RECEIVED;
                     break;
                 case FLAG_RECEIVED:
-                    if (byte == A_RE) state = A_RECEIVED;
+                    if (byte == A_RECEIVED) state = A_RECEIVEDCEIVED;
                     else if (byte != FLAG) state = START;
                     break;
-                case A_RECEIVED:
+                case A_RECEIVEDCEIVED:
                     if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) || byte == C_DISC){
                         state = C_RECEIVED;
                         cField = byte;   
@@ -414,7 +413,7 @@ unsigned char readControlFrame(int fd){
                     else state = START;
                     break;
                 case C_RECEIVED:
-                    if (byte == (A_RE ^ cField)) state = BCC1_OK;
+                    if (byte == (A_RECEIVED ^ cField)) state = BCC1_OK;
                     else if (byte == FLAG) state = FLAG_RECEIVED;
                     else state = START;
                     break;

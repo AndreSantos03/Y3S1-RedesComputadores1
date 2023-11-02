@@ -13,6 +13,9 @@
 #include <unistd.h>
 #include <math.h>
 
+#define MAX_PAYLOAD_SIZE 1000
+
+
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
@@ -52,7 +55,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             long int fileSize = ftell(file)-prev;
             fseek(file,prev,SEEK_SET);
 
-                
+
             unsigned int cpSize;
             unsigned char *controlPacketStart = getControlPacket(2, filename, fileSize, &cpSize);
             if(llwrite(fd, controlPacketStart, cpSize) == -1){ 
