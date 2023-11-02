@@ -27,11 +27,6 @@ int timeout = 0;
 int retransmitions = 0;
 
 
-void alarmHandler(int signal) {
-    alarmTriggered = TRUE;
-    alarmCount++;
-}
-
 
 int tramaTransmitter = 0;
 int tramaReceiver = 1;
@@ -459,4 +454,10 @@ unsigned char readControlFrame(int fd){
         } 
     } 
     return cField;
+}
+
+
+void alarmHandler(int signal) {
+    alarmTriggered = TRUE;
+    alarmCount++;
 }
