@@ -169,25 +169,43 @@ int llopen(connectionParameters connectionParameters) {
                 if (bytes > 0) {
                     switch (state) {
                         case START:
-                            if (byte == FLAG) state = FLAG_RECEIVED;
+                            if (byte == FLAG) if{
+                                state = FLAG_RECEIVED;
+                            }
                             break;
                         case FLAG_RECEIVED:
-                            if (byte == A_SET) state = A_SETCEIVED;
-                            else if (byte != FLAG) state = START;
+                            if (byte == A_SET) {
+                                state = A_SETCEIVED;
+                            }
+                            else if (byte != FLAG) {
+                                state = START;
+                            }
                             break;
                         case A_SETCEIVED:
-                            if (byte == C_SET) state = C_RECEIVED;
-                            else if (byte == FLAG) state = FLAG_RECEIVED;
+                            if (byte == C_SET) {
+                                state = C_RECEIVED;
+                            }
+                            else if (byte == FLAG){ 
+                                state = FLAG_RECEIVED;
+                            }
                             else state = START;
                             break;
                         case C_RECEIVED:
-                            if (byte == (A_SET ^ C_SET)) state = BCC1_OK;
-                            else if (byte == FLAG) state = FLAG_RECEIVED;
-                            else state = START;
+                            if (byte == (A_SET ^ C_SET)) {
+                                state = BCC1_OK;
+                            }
+                            else if (byte == FLAG) {
+                                state = FLAG_RECEIVED;
+                            }
+                            else {
+                                state = START;
+                            }
                             break;
                         case BCC1_OK:
                             if (byte == FLAG) state = EXIT;
-                            else state = START;
+                            else {
+                                state = START;
+                            }
                             break;
                         default: 
                             break;
@@ -204,7 +222,7 @@ int llopen(connectionParameters connectionParameters) {
 
 
 int llwrite(int fd, const unsigned char *buf, int bufSize) {
-
+    //creates frame
     int frameSize = 6+bufSize;
     unsigned char *frame = (unsigned char *) malloc(frameSize);
     frame[0] = FLAG;
@@ -212,9 +230,17 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
     frame[2] = C_N(tramaTransmitter);
     frame[3] = frame[1] ^frame[2];
     memcpy(frame+4,buf, bufSize);
-    unsigned char BCC2 = buf[0];
-    for (unsigned int i = 1 ; i < bufSize ; i++) BCC2 ^= buf[i];
 
+
+    // GENERATE BCC2
+    unsigned char BCC2 = buf[0];
+    for (unsigned int i = 1 ; i < bufSize ; i++){
+
+     BCC2 ^= buf[i];
+    }
+
+
+     // BYTE STUFFING 
     int j = 4;
     for (unsigned int i = 0 ; i < bufSize ; i++) {
         if(buf[i] == FLAG || buf[i] == ESC) {
@@ -227,14 +253,16 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
     frame[j++] = FLAG;
 
     int currentTransmition = 0;
-    int rejected = 0, accepted = 0;
 
     while (currentTransmition < retransmitions) { 
+    
+        int rejReceived = 0;
+        int responseAccepted = 0;
+
         alarmTriggered = FALSE;
         alarm(timeout);
-        rejected = 0;
-        accepted = 0;
-        while (alarmTriggered == FALSE && !rejected && !accepted) {
+        
+        while (alarmTriggered == FALSE && !rejReceived && !responseAccepted) {
 
             write(fd, frame, j);
 
@@ -254,49 +282,55 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
                             else if (byte != FLAG) state = START;
                             break;
                         case A_SETCEIVED:
-                            if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) || byte == C_DISC){
+                            if(byte == C_REJ(0) || bute == C_REJ(1)){
+                                //RECEIVED REJECT MESSAGE
+                                rejReceived = 1;
                                 state = C_RECEIVED;
-                                cField = byte;   
                             }
-                            else if (byte == FLAG) state = FLAG_RECEIVED;
+                            else if(byte == C_RR(0) || byte == C_RR(1)){
+                                responseAccepted = 1;
+                                tramaTransmitter = (tramaTransmitter+1) % 2;
+                            }
+                            else if (byte == FLAG) {
+                                state = FLAG_RECEIVED;
+                            }
                             else state = START;
                             break;
                         case C_RECEIVED:
-                            if (byte == (A_SET ^ cField)) state = BCC1_OK;
-                            else if (byte == FLAG) state = FLAG_RECEIVED;
-                            else state = START;
+                            if (byte == (A_SET ^ cField)) {
+                                state = BCC1_OK;
+                            }
+                            else if (byte == FLAG){
+                                 state = FLAG_RECEIVED;
+                            }
+                            else {
+                                state = START;
+                            }
                             break;
                         case BCC1_OK:
                             if (byte == FLAG){
                                 state = EXIT;
                             }
-                            else state = START;
+                            else {
+                                state = START;
+                            }
                             break;
                         default: 
                             break;
                     }
                 } 
             } 
-            
-            if(!cField){
-                continue;
+            if(responseAccepted){
+                currentTransmition++
             }
-            else if(cField == C_REJ(0) || cField == C_REJ(1)) {
-                rejected = 1;
-            }
-            else if(cField == C_RR(0) || cField == C_RR(1)) {
-                accepted = 1;
-                tramaTransmitter = (tramaTransmitter+1) % 2;
-            }
-            else continue;
 
         }
-        if (accepted) break;
-        currentTransmition++;
     }
-    
+    //clears the space allocated for frame
     free(frame);
-    if(accepted) return frameSize;
+    if(responseAccepted) {
+        return frameSize;
+    }
     else{
         llclose(fd);
         return -1;
