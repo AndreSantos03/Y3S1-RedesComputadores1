@@ -249,87 +249,47 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
         }
         frame[j++] = buf[i];
     }
+
+    
     frame[j++] = BCC2;
     frame[j++] = FLAG;
 
     int currentTransmition = 0;
+    int rejected = 0, accepted = 0;
 
-    while (currentTransmition < retransmitions) { 
-        int rejReceived = 0;
-        int responseAccepted = 0;
+   while (currentTransmition < retransmitions) { 
         alarmTriggered = FALSE;
         alarm(timeout);
-        
-        while (alarmTriggered == FALSE && !rejReceived && !responseAccepted) {
+        rejected = 0;
+        accepted = 0;
+        while (alarmTriggered == FALSE && !rejected && !accepted) {
 
             write(fd, frame, j);
+            unsigned char result = readControlFrame(fd);
+            
+            if(!result){
+                continue;
+            }
+            else if(result == C_REJ(0) || result == C_REJ(1)) {
+                rejected = 1;
+            }
+            else if(result == C_RR(0) || result == C_RR(1)) {
+                accepted = 1;
+                tramaTx = (tramaTx+1) % 2;
+            }
+            else continue;
 
-            unsigned char byte, cField = 0;
-
-            connectionParametersState state = START;
-
-            //STATE MACHINE
-            while (state != EXIT && alarmTriggered == FALSE) {
-                int bytes = read(fd, &byte, 1);
-                if ( bytes > 0) {
-                    switch (state) {
-                        case START:
-                            if (byte == FLAG) state = FLAG_RECEIVED;
-                            break;
-                        case FLAG_RECEIVED:
-                            if (byte == A_SET) state = A_SETCEIVED;
-                            else if (byte != FLAG) state = START;
-                            break;
-                        case A_SETCEIVED:
-                            if(byte == C_REJ(0) || byte == C_REJ(1)){
-                                //RECEIVED REJECT MESSAGE
-                                rejReceived = 1;
-                                state = C_RECEIVED;
-                            }
-                            else if(byte == C_RR(0) || byte == C_RR(1)){
-                                responseAccepted = 1;
-                                tramaTransmitter = (tramaTransmitter+1) % 2;
-                            }
-                            else if (byte == FLAG) {
-                                state = FLAG_RECEIVED;
-                            }
-                            else state = START;
-                            break;
-                        case C_RECEIVED:
-                            if (byte == (A_SET ^ cField)) {
-                                state = BCC1_OK;
-                            }
-                            else if (byte == FLAG){
-                                 state = FLAG_RECEIVED;
-                            }
-                            else {
-                                state = START;
-                            }
-                            break;
-                        case BCC1_OK:
-                            if (byte == FLAG){
-                                state = EXIT;
-                            }
-                            else {
-                                state = START;
-                            }
-                            break;
-                        default: 
-                            break;
-                        if(responseAccepted){
-                            free(frame);
-                            break;
-                            return frameSize;
-                        }
-                    }
-                } 
-            } 
-            currentTransmition++;
         }
+        if (accepted) break;
+        currentTransmition++;
     }
-
-    llclose(fd);
-    return -1;
+    
+    free(frame);
+    if(accepted) return frameSize;
+    else{
+        llclose(fd);
+        return -1;
+    }
 }
 
 int llread(int fd, unsigned char *packet) {
@@ -456,4 +416,47 @@ int llclose(int fd){
     if (state != EXIT) return -1;
     controlFrame(fd, A_SET, C_UA);
     return close(fd);
+}
+
+
+unsigned char readControlFrame(int fd){
+
+    unsigned char byte, cField = 0;
+    LinkLayerState state = START;
+    
+    while (state != STOP_R && alarmTriggered == FALSE) {  
+        if (read(fd, &byte, 1) > 0 || 1) {
+            switch (state) {
+                case START:
+                    if (byte == FLAG) state = FLAG_RCV;
+                    break;
+                case FLAG_RCV:
+                    if (byte == A_RE) state = A_RCV;
+                    else if (byte != FLAG) state = START;
+                    break;
+                case A_RCV:
+                    if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) || byte == C_DISC){
+                        state = C_RCV;
+                        cField = byte;   
+                    }
+                    else if (byte == FLAG) state = FLAG_RCV;
+                    else state = START;
+                    break;
+                case C_RCV:
+                    if (byte == (A_RE ^ cField)) state = BCC1_OK;
+                    else if (byte == FLAG) state = FLAG_RCV;
+                    else state = START;
+                    break;
+                case BCC1_OK:
+                    if (byte == FLAG){
+                        state = STOP_R;
+                    }
+                    else state = START;
+                    break;
+                default: 
+                    break;
+            }
+        } 
+    } 
+    return cField;
 }
