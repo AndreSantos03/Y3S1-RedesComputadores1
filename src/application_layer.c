@@ -60,7 +60,6 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             long int bytesLeftToSend = f_size;
 
             while (bytesLeftToSend >= 0) { 
-
                 int size_of_data = bytesLeftToSend > (long int) MAX_PAYLOAD_SIZE ? MAX_PAYLOAD_SIZE : bytesLeftToSend;
                 unsigned char* data = (unsigned char*) malloc(size_of_data);
                 memcpy(data, stuff, size_of_data);
@@ -73,6 +72,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 }
 
                 bytesLeftToSend -= (long int) MAX_PAYLOAD_SIZE; 
+                printf("Sent Packet with %d bytes --- %ld left to be sent! \n",packetSize,bytesLeftToSend);
+                printf("-----------------------\n");
                 stuff += size_of_data; 
                 i = (i + 1) % 255;   
             }

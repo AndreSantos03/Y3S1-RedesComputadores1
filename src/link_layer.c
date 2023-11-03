@@ -190,8 +190,8 @@ int llwrite(const unsigned char *buf, int bufSize) {
         rejected = 0;
         accepted = 0;
         while (alarmEnabled == FALSE && !rejected && !accepted) {
-
-            if(write(fd, frame, j) < 0) return -1;
+            int bytes = write(fd, frame, j);
+            if(bytes <0) return -1;
             unsigned char controlField = readSupervisionFrame();
             
             if(!controlField){
@@ -229,7 +229,8 @@ int llread(unsigned char *packet) {
     llState state = START;
 
     while (state != STOP_RCV) {  
-        if (read(fd, &byte, 1) > 0) {
+        int bytes = read(fd, &byte, 1);
+        if (bytes > 0) {
             switch (state) {
                 case START:
                     if (byte == FLAG) state = FLAG_RCV;
@@ -315,6 +316,7 @@ int llclose(int showStatistics) {
         alarmEnabled = FALSE;
                 
         while (alarmEnabled == FALSE && state != STOP_RCV) {
+
             if (read(fd, &byte, 1) > 0) {
                 switch (state) {
                     case START:
@@ -401,6 +403,7 @@ unsigned char readSupervisionFrame() {
 
 // Send Supervision Frame
 int sendFrame(unsigned char A, unsigned char C) {
+    printf("Sent supervision frame: %char \n with 5 bytes!", A);
     unsigned char buffer[5] = {FLAG, A, C, A ^ C, FLAG};
     return write(fd, buffer, 5);
 }
