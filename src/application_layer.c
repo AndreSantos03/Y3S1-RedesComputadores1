@@ -17,7 +17,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 {
     LinkLayer connectionParameters;
     strcpy(connectionParameters.serialPort,serialPort);
-    connectionParameters.role = strcmp(role, "tx") ? LlRx : LlTx;
+    connectionParameters.role = strcmp(role, "tx") ? receiver : transmitter;
     connectionParameters.baudRate = baudRate;
     connectionParameters.nRetransmissions = nTries;
     connectionParameters.timeout = timeout;
@@ -30,7 +30,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
     switch (connectionParameters.role) {
 
-        case LlTx: {
+        case transmitter: {
             
             FILE* file = fopen(filename, "rb");
             if (file == NULL) {
@@ -38,55 +38,56 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 exit(-1);
             }
 
-            //Calculate file size
-            int aux = ftell(file);
+            //Calculate the file size by moving the file pointer from the 
+            //beginning of the file to the end and calculate the difference
+            int initial = ftell(file);
             fseek(file,0L,SEEK_END);
-            long int fileSize = ftell(file) - aux;
-            fseek(file, aux, SEEK_SET);
+            long int f_size = ftell(file) - initial;
+            fseek(file, initial, SEEK_SET);
 
-            //Write initial packet
-            unsigned int ctrlPacketSize;
-            unsigned char *initialPacket = controlPacket(2, filename, fileSize, &ctrlPacketSize);
-            if(llwrite(initialPacket, ctrlPacketSize) == -1){ 
-                printf("Error in initial packet\n");
+            //Write start packet for the receiver to know that packets are comming
+            unsigned int C_PacketSize;
+            unsigned char *startPacket = C_Packet(2, filename, f_size, &C_PacketSize);
+            if(llwrite(startPacket, C_PacketSize) == -1){ 
+                printf("An error occurred in the start Packet\n");
                 exit(-1);
             }
 
-            //Write data packets
-            unsigned char seq = 0;
-            unsigned char* content = (unsigned char*)malloc(sizeof(unsigned char) * fileSize);
-            fread(content, sizeof(unsigned char), fileSize, file);
-            long int remainingBytes = fileSize;
+            //Write data packets until there are no more data bytes left to send
+            unsigned char i = 0;
+            unsigned char* stuff = (unsigned char*)malloc(sizeof(unsigned char) * f_size);
+            fread(stuff, sizeof(unsigned char), f_size, file);
+            long int bytesLeftToSend = f_size;
 
-            while (remainingBytes >= 0) { 
+            while (bytesLeftToSend >= 0) { 
 
-                int dataSize = remainingBytes > (long int) MAX_PAYLOAD_SIZE ? MAX_PAYLOAD_SIZE : remainingBytes;
-                unsigned char* data = (unsigned char*) malloc(dataSize);
-                memcpy(data, content, dataSize);
+                int size_of_data = bytesLeftToSend > (long int) MAX_PAYLOAD_SIZE ? MAX_PAYLOAD_SIZE : bytesLeftToSend;
+                unsigned char* data = (unsigned char*) malloc(size_of_data);
+                memcpy(data, stuff, size_of_data);
                 int packetSize;
-                unsigned char* packet = dataPacket(seq, data, dataSize, &packetSize);
+                unsigned char* packet = D_Packet(i, data, size_of_data, &packetSize);
                 
                 if(llwrite(packet, packetSize) == -1) {
-                    printf("Error in data packet\n");
+                    printf("An error occurred in the data Packet\n");
                     exit(-1);
                 }
 
-                remainingBytes -= (long int) MAX_PAYLOAD_SIZE; 
-                content += dataSize; 
-                seq = (seq + 1) % 255;   
+                bytesLeftToSend -= (long int) MAX_PAYLOAD_SIZE; 
+                stuff += size_of_data; 
+                i = (i + 1) % 255;   
             }
 
-            //Write final packet
-            unsigned char *finalPacket = controlPacket(3, filename, fileSize, &ctrlPacketSize);
-            if(llwrite(finalPacket, ctrlPacketSize) == -1) { 
-                printf("Error in final packet\n");
+            //Write final packet for the receiver to know the delivery is finished
+            unsigned char *endPacket = C_Packet(3, filename, f_size, &C_PacketSize);
+            if(llwrite(endPacket, C_PacketSize) == -1) { 
+                printf("An error occurred in the end Packet\n");
                 exit(-1);
             }
             llclose(1); 
             break;
         }
 
-        case LlRx: {
+        case receiver: {
 
             unsigned char *packet = (unsigned char *)malloc(MAX_PAYLOAD_SIZE);
             int packetSize = -1;
@@ -94,8 +95,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             while ((packetSize = llread(packet)) < 0);
 
             //New file size
-            unsigned long int rcvFSize = 0;
-            auxRcvFileSize(packet, packetSize, &rcvFSize);
+            unsigned long int rcvFileSize = 0;
+            RcvFileSize_helper(packet, packetSize, &rcvFileSize);
 
             //Write new file
             FILE* newFile = fopen((char *) filename, "wb+");
@@ -105,12 +106,14 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 while ((packetSize = llread(packet)) < 0);
 
                 if(packetSize == 0) break; //Breaks if every packet has been read
+
                 else if(packet[0] != 3){
                     unsigned char *buffer = (unsigned char*)malloc(packetSize);
-                    auxDataPacket(packet, packetSize, buffer);
+                    D_Packet_helper(packet, packetSize, buffer);
                     fwrite(buffer, sizeof(unsigned char), packetSize - 4, newFile);
                     free(buffer);
                 }
+
                 else continue;
             }
 
@@ -123,18 +126,18 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     }
 }
 
-void auxRcvFileSize(unsigned char* packet, int size, unsigned long int *fileSize) {
+void RcvFileSize_helper(unsigned char* packet, int size, unsigned long int *f_size) {
 
     // File Size
     unsigned char fSizeB = packet[2];
     unsigned char fSizeAux[fSizeB];
     memcpy(fSizeAux, packet + 3, fSizeB);
     for(unsigned int i = 0; i < fSizeB; i++)
-        *fileSize |= (fSizeAux[fSizeB-i-1] << (8*i));
+        *f_size |= (fSizeAux[fSizeB-i-1] << (8*i));
         
 }
 
-unsigned char * controlPacket(const unsigned int ctrlField, const char* filename, long int length, unsigned int* size){
+unsigned char * C_Packet(const unsigned int ctrlField, const char* filename, long int length, unsigned int* size){
 
     int len1 = 0;
     unsigned int tmp = length;
@@ -166,21 +169,21 @@ unsigned char * controlPacket(const unsigned int ctrlField, const char* filename
     return packet;
 }
 
-unsigned char * dataPacket(unsigned char seq, unsigned char *data, int dataSize, int *packetSize){
+unsigned char * D_Packet(unsigned char i, unsigned char *data, int size_of_data, int *packetSize){
 
-    *packetSize = 4 + dataSize;
+    *packetSize = 4 + size_of_data;
     unsigned char* packet = (unsigned char*)malloc(*packetSize);
 
     packet[0] = 1;   
-    packet[1] = seq;
-    packet[2] = dataSize >> 8 & 0xFF;
-    packet[3] = dataSize & 0xFF;
-    memcpy(packet + 4, data, dataSize);
+    packet[1] = i;
+    packet[2] = size_of_data >> 8 & 0xFF;
+    packet[3] = size_of_data & 0xFF;
+    memcpy(packet + 4, data, size_of_data);
 
     return packet;
 }
 
-void auxDataPacket(const unsigned char* packet, const unsigned int packetSize, unsigned char* buffer) {
+void D_Packet_helper(const unsigned char* packet, const unsigned int packetSize, unsigned char* buffer) {
     memcpy(buffer, packet + 4, packetSize - 4);
     buffer += (packetSize + 4);
 }

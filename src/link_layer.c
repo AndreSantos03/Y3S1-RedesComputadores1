@@ -68,7 +68,7 @@ int llopen(LinkLayer connectionParameters) {
     retransmissions = connectionParameters.nRetransmissions;
     switch (connectionParameters.role) {
 
-        case LlTx: {
+        case transmitter: {
 			start_time = clock();
             (void) signal(SIGALRM, alarmHandler);
             while (connectionParameters.nRetransmissions != 0 && state != STOP_RCV) {
@@ -112,7 +112,7 @@ int llopen(LinkLayer connectionParameters) {
             break;  
         }
 
-        case LlRx: {
+        case receiver: {
 
             while (state != STOP_RCV) {
                 if (read(fd, &byte, 1) > 0) {

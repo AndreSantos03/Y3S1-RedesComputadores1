@@ -17,12 +17,12 @@
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename);
 
-void auxRcvFileSize(unsigned char* packet, int size, unsigned long int *fileSize);
+void RcvFileSize_helper(unsigned char* packet, int size, unsigned long int *fileSize);
 
-void auxDataPacket(const unsigned char* packet, const unsigned int packetSize, unsigned char* buffer);
+void D_Packet_helper(const unsigned char* packet, const unsigned int packetSize, unsigned char* buffer);
 
-unsigned char * controlPacket(const unsigned int ctrlField, const char* filename, long int length, unsigned int* size);
+unsigned char * C_Packet(const unsigned int ctrlField, const char* filename, long int length, unsigned int* size);
 
-unsigned char * dataPacket(unsigned char seq, unsigned char *data, int dataSize, int *packetSize);
+unsigned char * D_Packet(unsigned char seq, unsigned char *data, int dataSize, int *packetSize);
 
 #endif // _APPLICATION_LAYER_H_
