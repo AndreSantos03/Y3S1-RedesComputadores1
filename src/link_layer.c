@@ -271,6 +271,8 @@ int llread(unsigned char *packet) {
                             state = STOP_RCV;
                             if(sendFrame(A_RX, C_RR(tramaRx)) < 0){printf("Send Frame Error\n");}
                             tramaRx = (tramaRx + 1) % 2; //Ns module-2 counter (enables to distinguish frame 0 and frame 1)
+                            printf("-----------------------\n");
+                            printf("Received %d bytes\n", i);
                             return i; 
                         }
                         else{
