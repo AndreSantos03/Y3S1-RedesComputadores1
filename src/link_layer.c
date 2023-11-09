@@ -2,35 +2,40 @@
 
 #include "link_layer.h"
 
-volatile int STOP = FALSE;
-int fd = 0;
-int alarmEnabled = FALSE;
-int alarmCount = 0;
-int timeout = 0;
-int retransmissions = 0;
-unsigned char tramaTx = 0;
-unsigned char tramaRx = 1;
-clock_t start_time;
+// Global variables to manage the state and parameters of the link layer.
+volatile int STOP = FALSE;            // Flag to control program execution
+int fd = 0;                            // File descriptor for the serial port
+int alarmEnabled = FALSE;              // Flag to indicate if an alarm is active
+int alarmCount = 0;                    // Counter for the number of alarms triggered
+int timeout = 0;                       // Timeout value for communication
+int retransmissions = 0;               // Maximum number of retransmissions allowed
+unsigned char tramaTx = 0;             // Counter for transmitted frames
+unsigned char tramaRx = 1;             // Counter for received frames
+clock_t start_time;                     // Start time for measuring elapsed time
 
+// Function to handle the alarm signal.
 void alarmHandler(int signal) {
     alarmEnabled = TRUE;
     alarmCount++;
-	printf("Alarm #%d\n", alarmCount);
+    printf("Alarm #%d\n", alarmCount);
 }
 
+// Function to establish a connection on the specified serial port.
+// Returns the file descriptor on success or -1 on error.
 int connection(const char *serialPort) {
 
+    // Open the serial port
     int fd = open(serialPort, O_RDWR | O_NOCTTY);
     if (fd < 0) {
         perror(serialPort);
         return -1; 
     }
 
+    // Configure the serial port settings
     struct termios oldtio;
     struct termios newtio;
 
-    if (tcgetattr(fd, &oldtio) == -1)
-    {
+    if (tcgetattr(fd, &oldtio) == -1) {
         perror("tcgetattr");
         exit(-1);
     }
@@ -57,8 +62,11 @@ int connection(const char *serialPort) {
 ////////////////////////////////////////////////
 // LLOPEN
 ////////////////////////////////////////////////
+// Function to establish a connection using the specified link layer parameters.
+// Returns the file descriptor on success or -1 on error.
 int llopen(LinkLayer connectionParameters) {
     
+    // Initialize link layer state and open the serial port
     llState state = START;
     fd = connection(connectionParameters.serialPort);
     if (fd < 0) return -1;
@@ -66,17 +74,31 @@ int llopen(LinkLayer connectionParameters) {
     unsigned char byte;
     timeout = connectionParameters.timeout;
     retransmissions = connectionParameters.nRetransmissions;
+    
+    // Switch based on the role (transmitter or receiver)
     switch (connectionParameters.role) {
 
         case transmitter: {
+			// Record the start time for elapsed time calculation
 			start_time = clock();
+            
+            // Set up the alarm signal handler
             (void) signal(SIGALRM, alarmHandler);
+
+            // Loop until either successful communication or maximum retransmissions reached
             while (connectionParameters.nRetransmissions != 0 && state != STOP_RECEIVED) {
                 
-                if(sendFrame(A_TX, C_SET) < 0){printf("Send Frame Error\n"); return -1;}
+                // Send the SET frame
+                if(sendFrame(A_TX, C_SET) < 0){
+                    printf("Send Frame Error\n");
+                    return -1;
+                }
+                
+                // Set the alarm and reset alarm flag
                 alarm(connectionParameters.timeout);
                 alarmEnabled = FALSE;
                 
+                // Inner loop for receiving frames and transitioning through states
                 while (alarmEnabled == FALSE && state != STOP_RECEIVED) {
                     if (read(fd, &byte, 1) > 0) {
                         switch (state) {
@@ -106,14 +128,17 @@ int llopen(LinkLayer connectionParameters) {
                         }
                     }
                 } 
+                // Decrement retransmission counter
                 connectionParameters.nRetransmissions--;
             }
+            
+            // Check if the connection was successfully established
             if (state != STOP_RECEIVED) return -1;
             break;  
         }
 
         case receiver: {
-
+            // Loop until a STOP frame is received
             while (state != STOP_RECEIVED) {
                 if (read(fd, &byte, 1) > 0) {
                     switch (state) {
@@ -143,37 +168,49 @@ int llopen(LinkLayer connectionParameters) {
                     }
                 }
             }  
-            if(sendFrame(A_RX, C_UA) < 0){printf("Send Frame Error\n"); return -1;}
+            // Send UA frame in response to SET frame reception
+            if(sendFrame(A_RX, C_UA) < 0){
+                printf("Send Frame Error\n");
+                return -1;
+            }
             break; 
         }
         default:
             return -1;
             break;
     }
+    
+    // Return the file descriptor for the established connection
     return fd;
 }
 
 ////////////////////////////////////////////////
 // LLWRITE
 ////////////////////////////////////////////////
+// Function to write data to the link layer.
+// Returns the number of bytes written or -1 on error.
 int llwrite(const unsigned char *buf, int bufSize) {
 
+    // Calculate frame size and allocate memory for the frame
     int frameSize = 6 + bufSize;
     unsigned char *frame = (unsigned char *) malloc(frameSize);
+    
+    // Construct the frame
     frame[0] = FLAG;
     frame[1] = A_TX;
     frame[2] = C_N(tramaTx);
     frame[3] = (frame[1] ^ frame[2]);
     memcpy(frame + 4, buf, bufSize);
 
+    // Calculate and append BCC2
     unsigned char BCC2 = buf[0];
-    for (unsigned int i = 1 ; i < bufSize ; i++) BCC2 ^= buf[i];
+    for (unsigned int i = 1; i < bufSize; i++) BCC2 ^= buf[i];
 
-    //Byte stuffing
+    // Byte stuffing
     int j = 4;
-    for (unsigned int i = 0 ; i < bufSize ; i++) {
-        if(buf[i] == FLAG || buf[i] == ESC) {
-            frame = realloc(frame,++frameSize);
+    for (unsigned int i = 0; i < bufSize; i++) {
+        if (buf[i] == FLAG || buf[i] == ESC) {
+            frame = realloc(frame, ++frameSize);
             frame[j++] = ESC;
         }
         frame[j++] = buf[i];
@@ -181,39 +218,48 @@ int llwrite(const unsigned char *buf, int bufSize) {
     frame[j++] = BCC2;
     frame[j++] = FLAG;
 
-    int currentTransmition = 0;
+    int currentTransmission = 0;
     int rejected = 0, accepted = 0;
 
-    while (currentTransmition < retransmissions) { 
+    // Loop until successful transmission or maximum retransmissions reached
+    while (currentTransmission < retransmissions) { 
         alarmEnabled = FALSE;
         alarm(timeout);
         rejected = 0;
         accepted = 0;
+
+        // Inner loop for waiting acknowledgment frames
         while (alarmEnabled == FALSE && !rejected && !accepted) {
             int bytes = write(fd, frame, j);
-            if(bytes <0) return -1;
+            if (bytes < 0) return -1;
+
+            // Read supervision frame and check control field
             unsigned char controlField = readSupervisionFrame();
-            
-            if(!controlField){
+
+            if (!controlField) {
+                continue;
+            } else if (controlField == C_REJ(0) || controlField == C_REJ(1)) {
+                rejected = 1;
+            } else if (controlField == C_RR(0) || controlField == C_RR(1)) {
+                accepted = 1;
+                tramaTx = (tramaTx + 1) % 2;  // Nr module-2 counter (enables to distinguish frame 0 and frame 1)
+            } else {
                 continue;
             }
-            else if(controlField == C_REJ(0) || controlField == C_REJ(1)) {
-                rejected = 1;
-            }
-            else if(controlField == C_RR(0) || controlField == C_RR(1)) {
-                accepted = 1;
-                tramaTx = (tramaTx + 1) % 2;  //Nr module-2 counter (enables to distinguish frame 0 and frame 1)
-            }
-            else continue;
-
         }
+
+        // Break the loop if the frame is accepted
         if (accepted) break;
-        currentTransmition++;
+        currentTransmission++;
     }
     
+    // Free allocated memory
     free(frame);
-    if(accepted) return frameSize;
-    else{
+    
+    // Return the number of bytes written or -1 on failure
+    if (accepted) return frameSize;
+    else {
+        // If transmission is not successful, close the connection
         llclose(1);
         return -1;
     }
@@ -222,12 +268,15 @@ int llwrite(const unsigned char *buf, int bufSize) {
 ////////////////////////////////////////////////
 // LLREAD
 ////////////////////////////////////////////////
+// Function to read data from the link layer.
+// Returns the number of bytes read or -1 on error.
 int llread(unsigned char *packet) {
 
     unsigned char byte, ctrlField;
     int i = 0;
     llState state = START;
 
+    // Loop until the end of frame is received
     while (state != STOP_RECEIVED) {  
         int bytes = read(fd, &byte, 1);
         if (bytes > 0) {
@@ -264,17 +313,20 @@ int llread(unsigned char *packet) {
                         packet[i] = '\0';
                         unsigned char bcc2Check = packet[0];
 
+                        // Check BCC2 for error detection
                         for (unsigned int j = 1; j < i; j++)
                             bcc2Check ^= packet[j];
 
+                        // If BCC2 is correct, stop receiving and send acknowledgment
                         if (bcc2 == bcc2Check){
                             state = STOP_RECEIVED;
                             if(sendFrame(A_RX, C_RR(tramaRx)) < 0){printf("Send Frame Error\n");}
-                            tramaRx = (tramaRx + 1) % 2; //Ns module-2 counter (enables to distinguish frame 0 and frame 1)
+                            tramaRx = (tramaRx + 1) % 2; // Ns module-2 counter (enables to distinguish frame 0 and frame 1)
                             printf("-----------------------\n");
                             printf("Received %d bytes\n", i);
                             return i; 
                         }
+                        // If BCC2 is incorrect, request retransmission
                         else{
                             printf("Retransmission Error\n");
                             sendFrame(A_RX, C_REJ(tramaRx));
@@ -299,24 +351,31 @@ int llread(unsigned char *packet) {
             }
         }
     }
+
+    // Return -1 if an error occurs
     return -1;
 }
 
 ////////////////////////////////////////////////
 // LLCLOSE
 ////////////////////////////////////////////////
+// Function to close the link layer connection.
+// Returns 1 on success, -1 on error.
 int llclose(int showStatistics) {
 
     llState state = START;
     unsigned char byte;
     (void) signal(SIGALRM, alarmHandler);
     
+    // Loop until the maximum number of retransmissions is reached or the connection is closed
     while (retransmissions != 0 && state != STOP_RECEIVED) {
                 
+        // Send DISC frame
         if(sendFrame(A_TX, C_DISC) < 0){printf("Send Frame Error\n"); return -1;}
         alarm(timeout);
         alarmEnabled = FALSE;
                 
+        // Wait for response
         while (alarmEnabled == FALSE && state != STOP_RECEIVED) {
 
             if (read(fd, &byte, 1) > 0) {
@@ -350,22 +409,32 @@ int llclose(int showStatistics) {
         retransmissions--;
     }
 
+    // Check if the connection is closed
     if (state != STOP_RECEIVED) return -1;
-    if(sendFrame(A_TX, C_UA) < 0) return -1;
-	if (showStatistics == 1) {
-		clock_t end_time = clock();
 
-		double elapsed_time = (double)(end_time - start_time) / CLOCKS_PER_SEC;
-		printf("Elapsed time: %f seconds\n", elapsed_time);
-	}
+    // Send UA frame to acknowledge the DISC frame
+    if(sendFrame(A_TX, C_UA) < 0) return -1;
+
+    // Print statistics if required
+    if (showStatistics == 1) {
+        clock_t end_time = clock();
+
+        double elapsed_time = (double)(end_time - start_time) / CLOCKS_PER_SEC;
+        printf("Elapsed time: %f seconds\n", elapsed_time);
+    }
+    
+    // Close the file descriptor
     return close(fd);
 }
 
+// Function to read a supervision frame from the link layer.
+// Returns the control field of the received frame.
 unsigned char readSupervisionFrame() {
 
     unsigned char byte, ctrlField = 0;
     llState state = START;
     
+    // Loop until the end of frame is received or an alarm is triggered
     while (state != STOP_RECEIVED && alarmEnabled == FALSE) {  
         if (read(fd, &byte, 1) > 0 || 1) {
             switch (state) {
@@ -403,9 +472,10 @@ unsigned char readSupervisionFrame() {
     return ctrlField;
 }
 
-// Send Supervision Frame
+// Function to send a supervision frame.
+// Returns the number of bytes written on success, or -1 on error.
 int sendFrame(unsigned char A, unsigned char C) {
-    printf("Sent supervision frame: %char \n with 5 bytes!", A);
+    printf("Sent supervision frame: %c\n with 5 bytes!", A);
     unsigned char buffer[5] = {FLAG, A, C, A ^ C, FLAG};
     return write(fd, buffer, 5);
 }
