@@ -22,13 +22,13 @@ typedef struct
 typedef enum
 {
    START,
-   FLAG_RCV,
-   A_RCV,
-   C_RCV,
-   BCC1_CHECK,
-   STOP_RCV,
+   FLAG_RECEIVED,
+   A_RECEIVED,
+   C_RECEIVED,
+   BCC_CHECK,
+   STOP_RECEIVED,
    DATA_FOUND,
-   READING_DATA,
+   BYTE_DESTUFFING,
    DISCONNECTED,
    BCC2_CHECK
 } llState;

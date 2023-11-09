@@ -71,34 +71,34 @@ int llopen(LinkLayer connectionParameters) {
         case transmitter: {
 			start_time = clock();
             (void) signal(SIGALRM, alarmHandler);
-            while (connectionParameters.nRetransmissions != 0 && state != STOP_RCV) {
+            while (connectionParameters.nRetransmissions != 0 && state != STOP_RECEIVED) {
                 
                 if(sendFrame(A_TX, C_SET) < 0){printf("Send Frame Error\n"); return -1;}
                 alarm(connectionParameters.timeout);
                 alarmEnabled = FALSE;
                 
-                while (alarmEnabled == FALSE && state != STOP_RCV) {
+                while (alarmEnabled == FALSE && state != STOP_RECEIVED) {
                     if (read(fd, &byte, 1) > 0) {
                         switch (state) {
                             case START:
-                                if (byte == FLAG) state = FLAG_RCV;
+                                if (byte == FLAG) state = FLAG_RECEIVED;
                                 break;
-                            case FLAG_RCV:
-                                if (byte == A_RX) state = A_RCV;
+                            case FLAG_RECEIVED:
+                                if (byte == A_RX) state = A_RECEIVED;
                                 else if (byte != FLAG) state = START;
                                 break;
-                            case A_RCV:
-                                if (byte == C_UA) state = C_RCV;
-                                else if (byte == FLAG) state = FLAG_RCV;
+                            case A_RECEIVED:
+                                if (byte == C_UA) state = C_RECEIVED;
+                                else if (byte == FLAG) state = FLAG_RECEIVED;
                                 else state = START;
                                 break;
-                            case C_RCV:
-                                if (byte == (A_RX ^ C_UA)) state = BCC1_CHECK;
-                                else if (byte == FLAG) state = FLAG_RCV;
+                            case C_RECEIVED:
+                                if (byte == (A_RX ^ C_UA)) state = BCC_CHECK;
+                                else if (byte == FLAG) state = FLAG_RECEIVED;
                                 else state = START;
                                 break;
-                            case BCC1_CHECK:
-                                if (byte == FLAG) state = STOP_RCV;
+                            case BCC_CHECK:
+                                if (byte == FLAG) state = STOP_RECEIVED;
                                 else state = START;
                                 break;
                             default: 
@@ -108,34 +108,34 @@ int llopen(LinkLayer connectionParameters) {
                 } 
                 connectionParameters.nRetransmissions--;
             }
-            if (state != STOP_RCV) return -1;
+            if (state != STOP_RECEIVED) return -1;
             break;  
         }
 
         case receiver: {
 
-            while (state != STOP_RCV) {
+            while (state != STOP_RECEIVED) {
                 if (read(fd, &byte, 1) > 0) {
                     switch (state) {
                         case START:
-                            if (byte == FLAG) state = FLAG_RCV;
+                            if (byte == FLAG) state = FLAG_RECEIVED;
                             break;
-                        case FLAG_RCV:
-                            if (byte == A_TX) state = A_RCV;
+                        case FLAG_RECEIVED:
+                            if (byte == A_TX) state = A_RECEIVED;
                             else if (byte != FLAG) state = START;
                             break;
-                        case A_RCV:
-                            if (byte == C_SET) state = C_RCV;
-                            else if (byte == FLAG) state = FLAG_RCV;
+                        case A_RECEIVED:
+                            if (byte == C_SET) state = C_RECEIVED;
+                            else if (byte == FLAG) state = FLAG_RECEIVED;
                             else state = START;
                             break;
-                        case C_RCV:
-                            if (byte == (A_TX ^ C_SET)) state = BCC1_CHECK;
-                            else if (byte == FLAG) state = FLAG_RCV;
+                        case C_RECEIVED:
+                            if (byte == (A_TX ^ C_SET)) state = BCC_CHECK;
+                            else if (byte == FLAG) state = FLAG_RECEIVED;
                             else state = START;
                             break;
-                        case BCC1_CHECK:
-                            if (byte == FLAG) state = STOP_RCV;
+                        case BCC_CHECK:
+                            if (byte == FLAG) state = STOP_RECEIVED;
                             else state = START;
                             break;
                         default: 
@@ -228,35 +228,35 @@ int llread(unsigned char *packet) {
     int i = 0;
     llState state = START;
 
-    while (state != STOP_RCV) {  
+    while (state != STOP_RECEIVED) {  
         int bytes = read(fd, &byte, 1);
         if (bytes > 0) {
             switch (state) {
                 case START:
-                    if (byte == FLAG) state = FLAG_RCV;
+                    if (byte == FLAG) state = FLAG_RECEIVED;
                     break;
-                case FLAG_RCV:
-                    if (byte == A_TX) state = A_RCV;
+                case FLAG_RECEIVED:
+                    if (byte == A_TX) state = A_RECEIVED;
                     else if (byte != FLAG) state = START;
                     break;
-                case A_RCV:
+                case A_RECEIVED:
                     if (byte == C_N(0) || byte == C_N(1)){
-                        state = C_RCV;
+                        state = C_RECEIVED;
                         ctrlField = byte;   
                     }
-                    else if (byte == FLAG) state = FLAG_RCV;
+                    else if (byte == FLAG) state = FLAG_RECEIVED;
                     else if (byte == C_DISC) {
                         if(sendFrame(A_RX, C_DISC) < 0){printf("Send Frame Error\n"); return -1;}
                         return 0;
                     }
                     else state = START;
                     break;
-                case C_RCV:
-                    if (byte == (A_TX ^ ctrlField)) state = READING_DATA;
-                    else if (byte == FLAG) state = FLAG_RCV;
+                case C_RECEIVED:
+                    if (byte == (A_TX ^ ctrlField)) state = BYTE_DESTUFFING;
+                    else if (byte == FLAG) state = FLAG_RECEIVED;
                     else state = START;
                     break;
-                case READING_DATA:
+                case BYTE_DESTUFFING:
                     if (byte == ESC) state = DATA_FOUND;
                     else if (byte == FLAG){
                         unsigned char bcc2 = packet[i-1];
@@ -268,7 +268,7 @@ int llread(unsigned char *packet) {
                             bcc2Check ^= packet[j];
 
                         if (bcc2 == bcc2Check){
-                            state = STOP_RCV;
+                            state = STOP_RECEIVED;
                             if(sendFrame(A_RX, C_RR(tramaRx)) < 0){printf("Send Frame Error\n");}
                             tramaRx = (tramaRx + 1) % 2; //Ns module-2 counter (enables to distinguish frame 0 and frame 1)
                             printf("-----------------------\n");
@@ -287,7 +287,7 @@ int llread(unsigned char *packet) {
                     }
                     break;
                 case DATA_FOUND:
-                    state = READING_DATA;
+                    state = BYTE_DESTUFFING;
                     if (byte == ESC || byte == FLAG) packet[i++] = byte;
                     else{
                         packet[i++] = ESC;
@@ -311,35 +311,35 @@ int llclose(int showStatistics) {
     unsigned char byte;
     (void) signal(SIGALRM, alarmHandler);
     
-    while (retransmissions != 0 && state != STOP_RCV) {
+    while (retransmissions != 0 && state != STOP_RECEIVED) {
                 
         if(sendFrame(A_TX, C_DISC) < 0){printf("Send Frame Error\n"); return -1;}
         alarm(timeout);
         alarmEnabled = FALSE;
                 
-        while (alarmEnabled == FALSE && state != STOP_RCV) {
+        while (alarmEnabled == FALSE && state != STOP_RECEIVED) {
 
             if (read(fd, &byte, 1) > 0) {
                 switch (state) {
                     case START:
-                        if (byte == FLAG) state = FLAG_RCV;
+                        if (byte == FLAG) state = FLAG_RECEIVED;
                         break;
-                    case FLAG_RCV:
-                        if (byte == A_RX) state = A_RCV;
+                    case FLAG_RECEIVED:
+                        if (byte == A_RX) state = A_RECEIVED;
                         else if (byte != FLAG) state = START;
                         break;
-                    case A_RCV:
-                        if (byte == C_DISC) state = C_RCV;
-                        else if (byte == FLAG) state = FLAG_RCV;
+                    case A_RECEIVED:
+                        if (byte == C_DISC) state = C_RECEIVED;
+                        else if (byte == FLAG) state = FLAG_RECEIVED;
                         else state = START;
                         break;
-                    case C_RCV:
-                        if (byte == (A_RX ^ C_DISC)) state = BCC1_CHECK;
-                        else if (byte == FLAG) state = FLAG_RCV;
+                    case C_RECEIVED:
+                        if (byte == (A_RX ^ C_DISC)) state = BCC_CHECK;
+                        else if (byte == FLAG) state = FLAG_RECEIVED;
                         else state = START;
                         break;
-                    case BCC1_CHECK:
-                        if (byte == FLAG) state = STOP_RCV;
+                    case BCC_CHECK:
+                        if (byte == FLAG) state = STOP_RECEIVED;
                         else state = START;
                         break;
                     default: 
@@ -350,7 +350,7 @@ int llclose(int showStatistics) {
         retransmissions--;
     }
 
-    if (state != STOP_RCV) return -1;
+    if (state != STOP_RECEIVED) return -1;
     if(sendFrame(A_TX, C_UA) < 0) return -1;
 	if (showStatistics == 1) {
 		clock_t end_time = clock();
@@ -366,32 +366,32 @@ unsigned char readSupervisionFrame() {
     unsigned char byte, ctrlField = 0;
     llState state = START;
     
-    while (state != STOP_RCV && alarmEnabled == FALSE) {  
+    while (state != STOP_RECEIVED && alarmEnabled == FALSE) {  
         if (read(fd, &byte, 1) > 0 || 1) {
             switch (state) {
                 case START:
-                    if (byte == FLAG) state = FLAG_RCV;
+                    if (byte == FLAG) state = FLAG_RECEIVED;
                     break;
-                case FLAG_RCV:
-                    if (byte == A_RX) state = A_RCV;
+                case FLAG_RECEIVED:
+                    if (byte == A_RX) state = A_RECEIVED;
                     else if (byte != FLAG) state = START;
                     break;
-                case A_RCV:
+                case A_RECEIVED:
                     if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) || byte == C_DISC){
-                        state = C_RCV;
+                        state = C_RECEIVED;
                         ctrlField = byte;   
                     }
-                    else if (byte == FLAG) state = FLAG_RCV;
+                    else if (byte == FLAG) state = FLAG_RECEIVED;
                     else state = START;
                     break;
-                case C_RCV:
-                    if (byte == (A_RX ^ ctrlField)) state = BCC1_CHECK;
-                    else if (byte == FLAG) state = FLAG_RCV;
+                case C_RECEIVED:
+                    if (byte == (A_RX ^ ctrlField)) state = BCC_CHECK;
+                    else if (byte == FLAG) state = FLAG_RECEIVED;
                     else state = START;
                     break;
-                case BCC1_CHECK:
+                case BCC_CHECK:
                     if (byte == FLAG){
-                        state = STOP_RCV;
+                        state = STOP_RECEIVED;
                     }
                     else state = START;
                     break;
