@@ -76,7 +76,12 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 }
 
                 bytesLeftToSend -= MAX_PAYLOAD_SIZE;
+                if( bytesLeftToSend <= 0){
+                  printf("Sent Packet with %d bytes --- 0 left to be sent! \n", packetSize);
+                }
+                else{
                 printf("Sent Packet with %d bytes --- %ld left to be sent! \n", packetSize, bytesLeftToSend);
+                }
                 printf("-----------------------\n");
                 stuff += size_of_data;
                 i = (i + 1) % 255;
