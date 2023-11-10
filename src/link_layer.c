@@ -475,7 +475,6 @@ unsigned char readSupervisionFrame() {
 // Function to send a supervision frame.
 // Returns the number of bytes written on success, or -1 on error.
 int sendFrame(unsigned char A, unsigned char C) {
-    printf("Sent supervision frame: %c\n with 5 bytes!", A);
     unsigned char buffer[5] = {FLAG, A, C, A ^ C, FLAG};
     return write(fd, buffer, 5);
 }
