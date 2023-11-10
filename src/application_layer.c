@@ -89,9 +89,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
             // Send the final packet to signal the end of transmission
             unsigned char *endPacket = C_Packet(3, filename, f_size, &C_PacketSize);
-            if (llwrite(endPacket, C_PacketSize) == -1) {
+            while (llwrite(endPacket, C_PacketSize) == -1) {
                 printf("An error occurred in the end Packet\n");
-                exit(-1);
+                
             }
 
             // Close the connection
