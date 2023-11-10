@@ -34,7 +34,7 @@ typedef enum {
 } llState;
 
 // Maximum payload size accepted by the Link Layer.
-#define MAX_PAYLOAD_SIZE 1000
+#define MAX_PAYLOAD_SIZE 100
 
 // Boolean values
 #define FALSE 0
