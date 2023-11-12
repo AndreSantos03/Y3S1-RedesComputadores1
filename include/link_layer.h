@@ -61,9 +61,19 @@ typedef enum {
 #define C_SET 0x03
 #define C_DISC 0x0B
 #define C_UA 0x07
-#define C_RR(Nr) ((Nr << 7) | 0x05)
+/* #define C_RR(Nr) ((Nr << 7) | 0x05)
 #define C_REJ(Nr) ((Nr << 7) | 0x01)
 #define C_N(Ns) (Ns << 6)
+ */
+#define C_RR0 0x05
+#define C_RR1 0x85
+#define C_REJ0 0x01
+#define C_REJ1 0x81
+#define C_N0 0x00
+#define C_N1 0x40
+
+
+
 
 // Function to establish a connection using the specified parameters.
 // Returns "1" on success or "-1" on error.

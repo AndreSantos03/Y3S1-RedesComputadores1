@@ -17,10 +17,6 @@
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename);
 
-
-// Helper function to extract data from a data packet
-void D_Packet_helper(const unsigned char* packet, const unsigned int packetSize, unsigned char* buffer);
-
 // Helper function to create a control packet
 unsigned char * createControlPacket(const unsigned int ctrlField, const char* filename, long int length, unsigned int* size);
 

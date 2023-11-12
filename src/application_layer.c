@@ -209,9 +209,3 @@ unsigned char *createControlPacket(const unsigned int ctrlField, const char *fil
 }
 
 
-// Helper function to extract data from a data packet
-void D_Packet_helper(const unsigned char *packet, const unsigned int packetSize, unsigned char *buffer) {
-    // Copy data from the data packet, excluding the packet header
-    memcpy(buffer, packet + 4, packetSize - 4);
-    buffer += (packetSize - 4);
-}
