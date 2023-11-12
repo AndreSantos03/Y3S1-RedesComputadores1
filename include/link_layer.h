@@ -82,10 +82,5 @@ int llread(unsigned char *packet);
 // Returns "1" on success or "-1" on error.
 int llclose(int showStatistics);
 
-// Helper function to read a supervision frame.
-unsigned char readSupervisionFrame();
-
-// Helper function to send a supervision frame.
-int sendFrame(unsigned char A, unsigned char C);
 
 #endif // _LINK_LAYER_H_

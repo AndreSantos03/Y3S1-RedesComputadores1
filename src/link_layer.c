@@ -88,8 +88,10 @@ int llopen(LinkLayer connectionParameters) {
             // Loop until either successful communication or maximum retransmissions reached
             while (connectionParameters.nRetransmissions != 0 && state != STOP_RECEIVED) {
                 
+                 // Construct and send the SET frame
+                unsigned char setFrame[5] = {FLAG, A_TX, C_SET, A_TX ^ C_SET, FLAG};
                 // Send the SET frame
-                if(sendFrame(A_TX, C_SET) < 0){
+                if(write(fd, setFrame, 5) < 0){
                     printf("Send Frame Error\n");
                     return -1;
                 }
@@ -168,8 +170,11 @@ int llopen(LinkLayer connectionParameters) {
                     }
                 }
             }  
+            }  
+            // Construct and send the UA frame in response to SET frame reception
+            unsigned char uaFrame[5] = {FLAG, A_RX, C_UA, A_RX ^ C_UA, FLAG};
             // Send UA frame in response to SET frame reception
-            if(sendFrame(A_RX, C_UA) < 0){
+            if(write(fd, uaFrame, 5) < 0){
                 printf("Send Frame Error\n");
                 return -1;
             }
@@ -234,13 +239,50 @@ int llwrite(const unsigned char *buf, int bufSize) {
             if (bytes < 0) return -1;
 
             // Read supervision frame and check control field
-            unsigned char controlField = readSupervisionFrame();
+            unsigned char byte, ctrlField = 0;
+            llState state = START;
+            
+            // Loop until the end of frame is received or an alarm is triggered
+            while (state != STOP_RECEIVED && alarmEnabled == FALSE) {  
+                if (read(fd, &byte, 1) > 0 || 1) {
+                    switch (state) {
+                        case START:
+                            if (byte == FLAG) state = FLAG_RECEIVED;
+                            break;
+                        case FLAG_RECEIVED:
+                            if (byte == A_RX) state = A_RECEIVED;
+                            else if (byte != FLAG) state = START;
+                            break;
+                        case A_RECEIVED:
+                            if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) || byte == C_DISC){
+                                state = C_RECEIVED;
+                                ctrlField = byte;   
+                            }
+                            else if (byte == FLAG) state = FLAG_RECEIVED;
+                            else state = START;
+                            break;
+                        case C_RECEIVED:
+                            if (byte == (A_RX ^ ctrlField)) state = BCC_CHECK;
+                            else if (byte == FLAG) state = FLAG_RECEIVED;
+                            else state = START;
+                            break;
+                        case BCC_CHECK:
+                            if (byte == FLAG){
+                                state = STOP_RECEIVED;
+                            }
+                            else state = START;
+                            break;
+                        default: 
+                            break;
+                    }
+                } 
+            } 
 
-            if (!controlField) {
+            if (!ctrlField) {
                 continue;
-            } else if (controlField == C_REJ(0) || controlField == C_REJ(1)) {
+            } else if (ctrlField == C_REJ(0) || ctrlField == C_REJ(1)) {
                 rejected = 1;
-            } else if (controlField == C_RR(0) || controlField == C_RR(1)) {
+            } else if (ctrlField == C_RR(0) || ctrlField == C_RR(1)) {
                 accepted = 1;
                 tramaTx = (tramaTx + 1) % 2;  // Nr module-2 counter (enables to distinguish frame 0 and frame 1)
             } else {
@@ -295,7 +337,11 @@ int llread(unsigned char *packet) {
                     }
                     else if (byte == FLAG) state = FLAG_RECEIVED;
                     else if (byte == C_DISC) {
-                        if(sendFrame(A_RX, C_DISC) < 0){printf("Send Frame Error\n"); return -1;}
+                        unsigned char discFrame[5] = {FLAG, A_RX, C_DISC, A_RX ^ C_DISC, FLAG};
+                        if (write(fd, discFrame, 5) < 0) {
+                            printf("Send Frame Error\n");
+                            return -1;
+                        }
                         return 0;
                     }
                     else state = START;
@@ -320,7 +366,10 @@ int llread(unsigned char *packet) {
                         // If BCC2 is correct, stop receiving and send acknowledgment
                         if (bcc2 == bcc2Check){
                             state = STOP_RECEIVED;
-                            if(sendFrame(A_RX, C_RR(tramaRx)) < 0){printf("Send Frame Error\n");}
+                            unsigned char rrFrame[5] = {FLAG, A_RX, C_RR(tramaRx), A_RX ^ C_RR(tramaRx), FLAG};
+                            if (write(fd, rrFrame, 5) < 0) {
+                                printf("Send Frame Error\n");
+                            }
                             tramaRx = (tramaRx + 1) % 2; // Ns module-2 counter (enables to distinguish frame 0 and frame 1)
                             printf("-----------------------\n");
                             printf("Received %d bytes\n", i);
@@ -329,7 +378,10 @@ int llread(unsigned char *packet) {
                         // If BCC2 is incorrect, request retransmission
                         else{
                             printf("Retransmission Error\n");
-                            sendFrame(A_RX, C_REJ(tramaRx));
+                            unsigned char rejFrame[5] = {FLAG, A_RX, C_REJ(tramaRx), A_RX ^ C_REJ(tramaRx), FLAG};
+                            if (write(fd, rejFrame, 5) < 0) {
+                                printf("Send Frame Error\n");
+                            }
                             return -1;
                         };
 
@@ -356,6 +408,8 @@ int llread(unsigned char *packet) {
     return -1;
 }
 
+
+
 ////////////////////////////////////////////////
 // LLCLOSE
 ////////////////////////////////////////////////
@@ -370,8 +424,13 @@ int llclose(int showStatistics) {
     // Loop until the maximum number of retransmissions is reached or the connection is closed
     while (retransmissions != 0 && state != STOP_RECEIVED) {
                 
-        // Send DISC frame
-        if(sendFrame(A_TX, C_DISC) < 0){printf("Send Frame Error\n"); return -1;}
+        // Construct and send DISC frame
+        unsigned char discFrame[5] = {FLAG, A_TX, C_DISC, A_TX ^ C_DISC, FLAG};
+        if (write(fd, discFrame, 5) < 0) {
+            printf("Send Frame Error\n");
+            return -1;
+        }
+
         alarm(timeout);
         alarmEnabled = FALSE;
                 
@@ -412,8 +471,12 @@ int llclose(int showStatistics) {
     // Check if the connection is closed
     if (state != STOP_RECEIVED) return -1;
 
-    // Send UA frame to acknowledge the DISC frame
-    if(sendFrame(A_TX, C_UA) < 0) return -1;
+    // Construct and send UA frame to acknowledge the DISC frame
+    unsigned char uaFrame[5] = {FLAG, A_TX, C_UA, A_TX ^ C_UA, FLAG};
+    if (write(fd, uaFrame, 5) < 0) {
+        printf("Send Frame Error\n");
+        return -1;
+    }
 
     // Print statistics if required
     if (showStatistics == 1) {
@@ -425,56 +488,4 @@ int llclose(int showStatistics) {
     
     // Close the file descriptor
     return close(fd);
-}
-
-// Function to read a supervision frame from the link layer.
-// Returns the control field of the received frame.
-unsigned char readSupervisionFrame() {
-
-    unsigned char byte, ctrlField = 0;
-    llState state = START;
-    
-    // Loop until the end of frame is received or an alarm is triggered
-    while (state != STOP_RECEIVED && alarmEnabled == FALSE) {  
-        if (read(fd, &byte, 1) > 0 || 1) {
-            switch (state) {
-                case START:
-                    if (byte == FLAG) state = FLAG_RECEIVED;
-                    break;
-                case FLAG_RECEIVED:
-                    if (byte == A_RX) state = A_RECEIVED;
-                    else if (byte != FLAG) state = START;
-                    break;
-                case A_RECEIVED:
-                    if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) || byte == C_DISC){
-                        state = C_RECEIVED;
-                        ctrlField = byte;   
-                    }
-                    else if (byte == FLAG) state = FLAG_RECEIVED;
-                    else state = START;
-                    break;
-                case C_RECEIVED:
-                    if (byte == (A_RX ^ ctrlField)) state = BCC_CHECK;
-                    else if (byte == FLAG) state = FLAG_RECEIVED;
-                    else state = START;
-                    break;
-                case BCC_CHECK:
-                    if (byte == FLAG){
-                        state = STOP_RECEIVED;
-                    }
-                    else state = START;
-                    break;
-                default: 
-                    break;
-            }
-        } 
-    } 
-    return ctrlField;
-}
-
-// Function to send a supervision frame.
-// Returns the number of bytes written on success, or -1 on error.
-int sendFrame(unsigned char A, unsigned char C) {
-    unsigned char buffer[5] = {FLAG, A, C, A ^ C, FLAG};
-    return write(fd, buffer, 5);
 }
