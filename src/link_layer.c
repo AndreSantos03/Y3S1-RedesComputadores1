@@ -170,7 +170,7 @@ int llopen(LinkLayer connectionParameters) {
                     }
                 }
             }  
-            }  
+
             // Construct and send the UA frame in response to SET frame reception
             unsigned char uaFrame[5] = {FLAG, A_RX, C_UA, A_RX ^ C_UA, FLAG};
             // Send UA frame in response to SET frame reception
@@ -180,10 +180,6 @@ int llopen(LinkLayer connectionParameters) {
             }
             break; 
         }
-        default:
-            return -1;
-            break;
-    }
     
     // Return the file descriptor for the established connection
     return fd;
