@@ -49,10 +49,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             long int f_size = ftell(file) - initial;
             fseek(file, initial, SEEK_SET);
 
-            // Calculate the number of bytes required to represent the file size
+            /* // Calculate the number of bytes required to represent the file size
             int len1 = 0;
             unsigned int tmp = f_size;
-
             while (tmp > 1) {
                 tmp >>= 1;
                 len1++;
@@ -90,6 +89,16 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 printf("An error occurred in the start Packet\n");
                 exit(-1);
             }
+ */
+
+
+            // Create and send the start packet to signal the beginning of transmission
+            unsigned int C_PacketSize;
+            unsigned char *startPacket = C_Packet(2, filename, f_size, &C_PacketSize);
+            if (llwrite(startPacket, C_PacketSize) == -1) {
+                printf("An error occurred in the start Packet\n");
+                exit(-1);
+            }
 
             // Send data packets until there are no more data bytes left to send
             unsigned char i = 0;
@@ -120,14 +129,37 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 i = (i + 1) % 255;
             }
 
-            // Send the final packet to signal the end of transmission
+            /* // Send the final packet to signal the end of transmission
             unsigned char *endPacket = (unsigned char *)malloc(C_PacketSize);
-            endPacket[0] = 3; // ctrlField for end packet
-            memcpy(endPacket + 1, startPacket + 1, C_PacketSize - 1); // Copy the rest of the end packet from the start packet
+            pos = 0;
+            endPacket[pos++] = 3; // ctrlField for end packet
+            endPacket[pos++] = 0; // T_1 (0 = file size)
+            endPacket[pos++] = len1; // L_1
+
+            // Fill in the bytes representing the file size in the control packet
+            for (unsigned char i = 0; i < len1; i++) {
+                endPacket[2 + len1 - i] = f_size & 0xFF;
+                f_size >>= 8; // V_1
+            }
+
+            pos += len1;
+            endPacket[pos++] = 1; // T_2 (1 = file name)
+            endPacket[pos++] = len2; // L_2
+
+            // Copy the file name into the control packet
+            memcpy(endPacket + pos, filename, len2); // V_2
 
             while (llwrite(endPacket, C_PacketSize) == -1) {
                 printf("An error occurred in the end Packet\n");
+            } */
+
+            // Send the final packet to signal the end of transmission
+            unsigned char *endPacket = C_Packet(3, filename, f_size, &C_PacketSize);
+            while (llwrite(endPacket, C_PacketSize) == -1) {
+                printf("An error occurred in the end Packet\n");
+                
             }
+
 
             // Close the connection
             llclose(1);
@@ -200,7 +232,7 @@ void RcvFileSize_helper(unsigned char *packet, int size, unsigned long int *f_si
         *f_size |= (fSizeAux[fSizeB - i - 1] << (8 * i));
 } */
 
-/* // Helper function to create a control packet
+// Helper function to create a control packet
 unsigned char *C_Packet(const unsigned int ctrlField, const char *filename, long int length, unsigned int *size) {
 
     int len1 = 0;
@@ -240,7 +272,7 @@ unsigned char *C_Packet(const unsigned int ctrlField, const char *filename, long
     memcpy(packet + pos, filename, len2); // V_2
 
     return packet;
-} */
+}
 
 // Helper function to create a data packet
 unsigned char *D_Packet(unsigned char i, unsigned char *data, int size_of_data, int *packetSize) {
