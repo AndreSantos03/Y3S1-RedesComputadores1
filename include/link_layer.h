@@ -61,10 +61,6 @@ typedef enum {
 #define C_SET 0x03
 #define C_DISC 0x0B
 #define C_UA 0x07
-/* #define C_RR(Nr) ((Nr << 7) | 0x05)
-#define C_REJ(Nr) ((Nr << 7) | 0x01)
-#define C_N(Ns) (Ns << 6)
- */
 #define C_RR(tramaRx) ((tramaRx == 0) ? 0x05 : 0x85)
 #define C_REJ(tramaRx) ((tramaRx == 0) ? 0x01 : 0x81)
 #define C_N(Ns) ((Ns == 0) ? 0x00 : 0x40)
