@@ -59,17 +59,12 @@ int connection(const char *serialPort) {
     return fd;
 } */
 
-////////////////////////////////////////////////
-// LLOPEN
-////////////////////////////////////////////////
 // Function to establish a connection using the specified link layer parameters.
 // Returns the file descriptor on success or -1 on error.
 int llopen(LinkLayer connectionParameters) {
     
-    // Initialize link layer state
+    // Initialize link layer state and open the serial port
     llState state = START;
-
-    // Open the serial port
     int fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
     if (fd < 0) {
         perror(connectionParameters.serialPort);
@@ -80,6 +75,33 @@ int llopen(LinkLayer connectionParameters) {
     timeout = connectionParameters.timeout;
     retransmissions = connectionParameters.nRetransmissions;
     
+    // Configure the serial port settings
+    struct termios oldtio;
+    struct termios newtio;
+
+    if (tcgetattr(fd, &oldtio) == -1) {
+        perror("tcgetattr");
+        close(fd);
+        return -1;
+    }
+
+    memset(&newtio, 0, sizeof(newtio));
+
+    newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
+    newtio.c_iflag = IGNPAR;
+    newtio.c_oflag = 0;
+    newtio.c_lflag = 0;
+    newtio.c_cc[VTIME] = 0;
+    newtio.c_cc[VMIN] = 0;
+
+    tcflush(fd, TCIOFLUSH);
+
+    if (tcsetattr(fd, TCSANOW, &newtio) == -1) {
+        perror("tcsetattr");
+        close(fd);
+        return -1;
+    }
+
     // Switch based on the role (transmitter or receiver)
     switch (connectionParameters.role) {
 
@@ -91,13 +113,13 @@ int llopen(LinkLayer connectionParameters) {
             (void) signal(SIGALRM, alarmHandler);
 
             // Loop until either successful communication or maximum retransmissions reached
-            while (state != STOP_RECEIVED && connectionParameters.nRetransmissions != 0 && state != STOP_RECEIVED) {
+            while (retransmissions != 0 && state != STOP_RECEIVED) {
                 
                  // Construct and send the SET frame
                 unsigned char setFrame[5] = {FLAG, A_TX, C_SET, A_TX ^ C_SET, FLAG};
                 // Send the SET frame
                 if(write(fd, setFrame, 5) < 0){
-                    printf("Send Frame Error!\n");
+                    printf("Send Frame Error\n");
                     close(fd);
                     return -1;
                 }
@@ -108,9 +130,7 @@ int llopen(LinkLayer connectionParameters) {
                 
                 // Inner loop for receiving frames and transitioning through states
                 while (alarmEnabled == FALSE && state != STOP_RECEIVED) {
-
-                    int bytes = read(fd, &byte, 1);
-                    if (bytes > 0) {
+                    if (read(fd, &byte, 1) > 0) {
                         switch (state) {
                             case START:
                                 if (byte == FLAG) state = FLAG_RECEIVED;
@@ -139,7 +159,7 @@ int llopen(LinkLayer connectionParameters) {
                     }
                 } 
                 // Decrement retransmission counter
-                connectionParameters.nRetransmissions--;
+                retransmissions--;
             }
             
             // Check if the connection was successfully established
@@ -147,16 +167,13 @@ int llopen(LinkLayer connectionParameters) {
                 close(fd);
                 return -1;
             }
-
-
             break;  
         }
 
         case receiver: {
             // Loop until a STOP frame is received
             while (state != STOP_RECEIVED) {
-                int bytes = read(fd, &byte, 1);
-                if (bytes > 0) {
+                if (read(fd, &byte, 1) > 0) {
                     switch (state) {
                         case START:
                             if (byte == FLAG) state = FLAG_RECEIVED;
@@ -188,18 +205,14 @@ int llopen(LinkLayer connectionParameters) {
             // Construct and send the UA frame in response to SET frame reception
             unsigned char uaFrame[5] = {FLAG, A_RX, C_UA, A_RX ^ C_UA, FLAG};
             // Send UA frame in response to SET frame reception
-            int bytes = write(fd, uaFrame, 5);
-            if(bytes < 0){
+            if(write(fd, uaFrame, 5) < 0){
                 printf("Send Frame Error\n");
                 close(fd);
                 return -1;
             }
-
-
             break; 
         }
     }
-
     // Return the file descriptor for the established connection
     return fd;
 }
