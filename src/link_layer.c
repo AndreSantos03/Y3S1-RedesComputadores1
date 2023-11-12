@@ -20,9 +20,9 @@ void alarmHandler(int signal) {
     printf("Alarm #%d\n", alarmCount);
 }
 
-/* // Function to establish a connection on the specified serial port.
+// Function to establish a connection on the specified serial port.
 // Returns the file descriptor on success or -1 on error.
-int connection(const char *serialPort) {
+int establishConnection(const char *serialPort) {
 
     // Open the serial port
     int fd = open(serialPort, O_RDWR | O_NOCTTY);
@@ -57,7 +57,7 @@ int connection(const char *serialPort) {
     }
 
     return fd;
-} */
+}
 
 // Function to establish a connection using the specified link layer parameters.
 // Returns the file descriptor on success or -1 on error.
@@ -65,42 +65,12 @@ int llopen(LinkLayer connectionParameters) {
     
     // Initialize link layer state and open the serial port
     llState state = START;
-    int fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
-    if (fd < 0) {
-        perror(connectionParameters.serialPort);
-        return -1; 
-    }
+    fd = establishConnection(connectionParameters.serialPort);
+    if (fd < 0) return -1;
 
     unsigned char byte;
     timeout = connectionParameters.timeout;
     retransmissions = connectionParameters.nRetransmissions;
-    
-    // Configure the serial port settings
-    struct termios oldtio;
-    struct termios newtio;
-
-    if (tcgetattr(fd, &oldtio) == -1) {
-        perror("tcgetattr");
-        close(fd);
-        return -1;
-    }
-
-    memset(&newtio, 0, sizeof(newtio));
-
-    newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
-    newtio.c_iflag = IGNPAR;
-    newtio.c_oflag = 0;
-    newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 0;
-    newtio.c_cc[VMIN] = 0;
-
-    tcflush(fd, TCIOFLUSH);
-
-    if (tcsetattr(fd, TCSANOW, &newtio) == -1) {
-        perror("tcsetattr");
-        close(fd);
-        return -1;
-    }
 
     // Switch based on the role (transmitter or receiver)
     switch (connectionParameters.role) {
