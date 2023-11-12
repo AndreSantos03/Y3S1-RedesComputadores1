@@ -296,89 +296,6 @@ int llwrite(const unsigned char *buf, int bufSize) {
     // This part should not be reached, but added for completeness
     free(frame);
     return -1;
-
-   /*  int currentTransmission = 0;
-    int rejected = 0, accepted = 0;
-
-    // Loop until successful transmission or maximum retransmissions reached
-    while (currentTransmission < retransmissions) { 
-        alarmEnabled = FALSE;
-        alarm(timeout);
-        rejected = 0;
-        accepted = 0;
-
-        // Inner loop for waiting acknowledgment frames
-        while (alarmEnabled == FALSE && !rejected && !accepted) {
-            int bytes = write(fd, frame, j);
-            if (bytes < 0) return -1;
-
-            // Read supervision frame and check control field
-            unsigned char byte, ctrlField = 0;
-            llState state = START;
-            
-            // Loop until the end of frame is received or an alarm is triggered
-            while (state != STOP_RECEIVED && alarmEnabled == FALSE) {  
-                if (read(fd, &byte, 1) > 0 || 1) {
-                    switch (state) {
-                        case START:
-                            if (byte == FLAG) state = FLAG_RECEIVED;
-                            break;
-                        case FLAG_RECEIVED:
-                            if (byte == A_RX) state = A_RECEIVED;
-                            else if (byte != FLAG) state = START;
-                            break;
-                        case A_RECEIVED:
-                            if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) || byte == C_DISC){
-                                state = C_RECEIVED;
-                                ctrlField = byte;   
-                            }
-                            else if (byte == FLAG) state = FLAG_RECEIVED;
-                            else state = START;
-                            break;
-                        case C_RECEIVED:
-                            if (byte == (A_RX ^ ctrlField)) state = BCC_CHECK;
-                            else if (byte == FLAG) state = FLAG_RECEIVED;
-                            else state = START;
-                            break;
-                        case BCC_CHECK:
-                            if (byte == FLAG){
-                                state = STOP_RECEIVED;
-                            }
-                            else state = START;
-                            break;
-                        default: 
-                            break;
-                    }
-                } 
-            } 
-
-            if (!ctrlField) {
-                continue;
-            } else if (ctrlField == C_REJ(0) || ctrlField == C_REJ(1)) {
-                rejected = 1;
-            } else if (ctrlField == C_RR(0) || ctrlField == C_RR(1)) {
-                accepted = 1;
-                tramaTx = (tramaTx + 1) % 2;  // Nr module-2 counter (enables to distinguish frame 0 and frame 1)
-            } else {
-                continue;
-            }
-        }
-
-        // Break the loop if the frame is accepted
-        if (accepted) break;
-        currentTransmission++;
-    }
-    
-    // Free allocated memory
-    free(frame);
-    
-    // Return the number of bytes written or -1 on failure
-    if (accepted) return frameSize;
-    else {
-        // If transmission is not successful, close the connection
-        llclose(1);
-        return -1;
-    } */
 }
 
 ////////////////////////////////////////////////
@@ -388,10 +305,10 @@ int llwrite(const unsigned char *buf, int bufSize) {
 // Returns the number of bytes read or -1 on error.
 int llread(unsigned char *packet) {
 
-    unsigned char byte, ctrlField;
+    unsigned char byte;
+    unsigned char ctrlField;
     int i = 0;
     llState state = START;
-
     // Loop until the end of frame is received
     while (state != STOP_RECEIVED) {  
         int bytes = read(fd, &byte, 1);
@@ -430,7 +347,7 @@ int llread(unsigned char *packet) {
                     else if (byte == FLAG){
                         unsigned char bcc2 = packet[i-1];
                         i--;
-                        packet[i] = '\0';
+                        packet[i] = '\0'; 
                         unsigned char bcc2Check = packet[0];
 
                         // Check BCC2 for error detection
@@ -555,9 +472,7 @@ int llclose(int showStatistics) {
     // Print statistics if required
     if (showStatistics == 1) {
         clock_t end_time = clock();
-
-        double elapsed_time = (double)(end_time - start_time) / CLOCKS_PER_SEC;
-        printf("Elapsed time: %f seconds\n", elapsed_time);
+        printf("Elapsed time: %f seconds\n", (double)(end_time - start_time) / CLOCKS_PER_SEC);
     }
     
     // Close the file descriptor
