@@ -65,6 +65,8 @@ typedef enum {
 #define C_REJ(Nr) ((Nr << 7) | 0x01)
 #define C_N(Ns) (Ns << 6)
  */
+
+
 // Macro to generate control field for C_RR based on tramaRx (0 or 1)
 #define CONTROL_FIELD_RR(tramaRx) ((tramaRx == 0) ? 0x05 : 0x85)
 
@@ -73,9 +75,6 @@ typedef enum {
 
 // Macro to generate control field for C_N based on Ns (0 or 1)
 #define CONTROL_FIELD_N(Ns) ((Ns == 0) ? 0x00 : 0x40)
-unsigned char ctrlField_RR = CONTROL_FIELD_RR(tramaRx);
-unsigned char ctrlField_REJ = CONTROL_FIELD_REJ(tramaRx);
-unsigned char ctrlField_N = CONTROL_FIELD_N(Ns);
 
 
 // Function to establish a connection using the specified parameters.
