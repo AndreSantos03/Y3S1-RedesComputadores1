@@ -68,7 +68,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 int size_of_data = (bytesLeftToSend > MAX_PAYLOAD_SIZE) ? MAX_PAYLOAD_SIZE : bytesLeftToSend;
                 unsigned char *data = (unsigned char *)malloc(size_of_data);
                 memcpy(data, stuff, size_of_data);
-                int packetSize;
+                int packetSize = 4 + size_of_data;
                 /* unsigned char *packet = D_Packet(i, data, size_of_data, &packetSize); */
 
                 unsigned char *packet = (unsigned char *)malloc(packetSize);
@@ -81,7 +81,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
                 // Copy the data into the data packet
                 memcpy(packet + 4, data, size_of_data);
-                
+
                 if (llwrite(packet, packetSize) == -1) {
                     printf("An error occurred in the data Packet\n");
                     exit(-1);
