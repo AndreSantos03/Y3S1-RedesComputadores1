@@ -24,7 +24,4 @@ void D_Packet_helper(const unsigned char* packet, const unsigned int packetSize,
 // Helper function to create a control packet
 unsigned char * createControlPacket(const unsigned int ctrlField, const char* filename, long int length, unsigned int* size);
 
-// Helper function to create a data packet
-unsigned char * D_Packet(unsigned char seq, unsigned char *data, int dataSize, int *packetSize);
-
 #endif // _APPLICATION_LAYER_H_

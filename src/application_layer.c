@@ -144,8 +144,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
                 // Check if the packet is a data packet (not an end packet)
                 else if (packet[0] != 3) {
-                    unsigned char *buffer = (unsigned char *)malloc(packetSize);
-                    D_Packet_helper(packet, packetSize, buffer);
+                    unsigned char *buffer = (unsigned char *)malloc(packetSize - 4);
+                    memcpy(buffer, packet + 4, packetSize - 4);
                     fwrite(buffer, sizeof(unsigned char), packetSize - 4, newFile);
                     free(buffer);
                 }
@@ -158,6 +158,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             fclose(newFile);
             break;
         }
+
+        
         default:
             exit(-1);
             break;
@@ -206,23 +208,6 @@ unsigned char *createControlPacket(const unsigned int ctrlField, const char *fil
     return packet;
 }
 
-// Helper function to create a data packet
-unsigned char *D_Packet(unsigned char i, unsigned char *data, int size_of_data, int *packetSize) {
-
-    *packetSize = 4 + size_of_data;
-    unsigned char *packet = (unsigned char *)malloc(*packetSize);
-
-    // Populate the data packet fields
-    packet[0] = 1; // Data packet type
-    packet[1] = i; // Packet sequence number
-    packet[2] = size_of_data >> 8 & 0xFF; // High byte of size_of_data
-    packet[3] = size_of_data & 0xFF; // Low byte of size_of_data
-
-    // Copy the data into the data packet
-    memcpy(packet + 4, data, size_of_data);
-
-    return packet;
-}
 
 // Helper function to extract data from a data packet
 void D_Packet_helper(const unsigned char *packet, const unsigned int packetSize, unsigned char *buffer) {
