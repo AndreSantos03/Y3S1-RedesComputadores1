@@ -1,238 +1,227 @@
 // Application layer protocol implementation
 
-#include "../include/application_layer.h"
-#include "../include/link_layer.h"
+#include "application_layer.h"
+#include "link_layer.h"
+#include <string.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/stat.h>
 #include <string.h>
-#include<unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <termios.h>
+#include <unistd.h>
 
-#define BUF_SIZE 256
-// Campo de Controlo
-// Define o tipo de trama 
-#define C_DATA 0x01
-#define C_START 0x02
-#define C_END 0x03
-
+// Function to establish a connection and handle data transfer
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
-                      int nTries, int timeout, const char *filename)
-{
-    // get connection parameters and store them in a struct
+                      int nTries, int timeout, const char *filename) {
+
+    // Define and initialize link layer connection parameters
     LinkLayer connectionParameters;
-    int i;
-    for (i = 0; serialPort[i] != '\0'; i++){
-        connectionParameters.serialPort[i] = serialPort[i];
-    }
-
-
-    connectionParameters.serialPort[i] = serialPort[i];
-
-    if (role[0] == 't') {
-        connectionParameters.role = Transmitter;
-    }
-
-    else if (role[0] == 'r') {
-        connectionParameters.role = Receiver;
-    }
-    
+    strcpy(connectionParameters.serialPort, serialPort);
+    connectionParameters.role = (strcmp(role, "tx") != 0) ? receiver : transmitter; // Compare the role string
     connectionParameters.baudRate = baudRate;
     connectionParameters.nRetransmissions = nTries;
     connectionParameters.timeout = timeout;
 
-    // Open cable connection with set frame 
-    if (llopen(connectionParameters) == -1) return;
-
-    // Check if we are the Transmitter or Receiver and act acoordlingly
-    if(connectionParameters.role == Transmitter){
-        transmit(filename);
-    }
-    else {
-        receive();
-    }
-    
-    // Close cable connection
-    llclose(connectionParameters);
-}
-
-void transmit(const char *filename) {
-    // fopen for file reading
-    FILE *file;
-    file = fopen(filename, "rb");
-
-    // get and store file size
-    struct stat stats;
-    stat(filename, &stats);
-    size_t filesize = stats.st_size;
-    printf("Size of file to be sent: %ld bytes \n", filesize);
-    printf("Name of file to be sent: %s \n", filename);
-
-    // fread to read from file
-    unsigned char *filedata;
-    filedata = (unsigned char *)malloc(filesize);
-    fread(filedata, sizeof(unsigned char), filesize, file);
-
-    // send start frame
-    unsigned char start_frame[30];
-    start_frame[0] = C_START;
-
-    // 0 - file size
-    start_frame[1] = 0x0;
-    start_frame[2] = sizeof(size_t);
-    start_frame[3] = (filesize >> 24) & 0xFF;
-    start_frame[4] = (filesize >> 16) & 0xFF;
-    start_frame[5] = (filesize >> 8) & 0xFF;
-    start_frame[6] = filesize & 0xFF;
-    
-    // 1 - file name
-    start_frame[7] = strlen(filename)+1; 
-    int i = 8;
-    int j = 0;
-    while (j < strlen(filename) + 1){
-        start_frame[i] = filename[j];
-        j++;
-        i++;
+    // Establish a connection using link layer
+    int fd = llopen(connectionParameters);
+    if (fd < 0) {
+        perror("Connection error\n");
+        exit(-1);
     }
 
-    llwrite(start_frame, i);
-    printf("Sent start frame: %d bytes written \n", i);
+    switch (connectionParameters.role) {
 
-    // send data by packets of 100 except the last
-    size_t bytes_left_to_send = filesize;
-    unsigned int N = 0; unsigned int index_file_data = 0;
-    while (bytes_left_to_send != 0)
-    {
-        if (bytes_left_to_send >= 100) {
-            unsigned char packet[104]; // enviar 100 bytes em cada pacote
-            packet[0] = C_DATA;
-            packet[1] = N % 255; // N – número de sequência (módulo 255)
-            packet[2] = 0x0; // L2 L1 – indica o número de octetos (K) do campo de dados
-            packet[3] = 0x64; // (K = 256 * L2 + L1)
-            int i = 4;
-            while (i < 104){
-                packet[i] = filedata[index_file_data];
-                i++;
-                index_file_data++;
+        case transmitter: {
+            // Sender role
+
+            // Open the file for reading
+            FILE *file = fopen(filename, "rb");
+            if (file == NULL) {
+                perror("File not found\n");
+                exit(-1);
             }
-            if (llwrite(packet, 104) == -1) break;
-            bytes_left_to_send -= 100;
-            printf("Sent data packet nº %d: %d bytes written (There is %ld bytes left to be sent) \n", N, 104, bytes_left_to_send);
-            //sleep(3);
 
-        }
-        else {
-            unsigned char packet[bytes_left_to_send+4]; // enviar os restantes bytes quando bytes_left_to_send < 100
-            packet[0] = C_DATA;
-            packet[1] = N % 255; // N – número de sequência (módulo 255)
-            packet[2] = 0x0; // L2 L1 – indica o número de octetos (K) do campo de dados
-            packet[3] = bytes_left_to_send; // (K = 256 * L2 + L1)
-            int i = 4;
-            while (i < bytes_left_to_send+4){
-                packet[i] = filedata[index_file_data];
-                i++;
-                index_file_data++;
+            // Calculate the file size
+            int initial = ftell(file);
+            fseek(file, 0L, SEEK_END);
+            long int f_size = ftell(file) - initial;
+            fseek(file, initial, SEEK_SET);
+
+            // Create and send the start packet to signal the beginning of transmission
+            unsigned int C_PacketSize;
+            unsigned char *startPacket = C_Packet(2, filename, f_size, &C_PacketSize);
+            if (llwrite(startPacket, C_PacketSize) == -1) {
+                printf("An error occurred in the start Packet\n");
+                exit(-1);
             }
-            if (llwrite(packet, bytes_left_to_send+4) == -1) break;
-            printf("Sent data packet nº %d: %ld bytes written (There is %d bytes left to be sent) \n", N, bytes_left_to_send, 0);
-            bytes_left_to_send = 0;
-            //sleep(3);
-        }
-        N++;
-    }
 
-    // send end frame
-    unsigned char end[30];
-    end[0] = C_END;
-    int k = 1;
-    while (k < 30){
-        end[k] = start_frame[k];
-        k++;
-    }
-    
-    llwrite(end, i);
-    printf("Sent end frame %d bytes written \n", i);
+            // Send data packets until there are no more data bytes left to send
+            unsigned char i = 0;
+            unsigned char *stuff = (unsigned char *)malloc(sizeof(unsigned char) * f_size);
+            fread(stuff, sizeof(unsigned char), f_size, file);
+            long int bytesLeftToSend = f_size;
 
-    // fclose for reading
-    fclose(file);
-}
+            while (bytesLeftToSend > 0) {
+                int size_of_data = (bytesLeftToSend > MAX_PAYLOAD_SIZE) ? MAX_PAYLOAD_SIZE : bytesLeftToSend;
+                unsigned char *data = (unsigned char *)malloc(size_of_data);
+                memcpy(data, stuff, size_of_data);
+                int packetSize;
+                unsigned char *packet = D_Packet(i, data, size_of_data, &packetSize);
 
-void receive() {
-    // receive start frame
-    unsigned char packet[BUF_SIZE];
-    int bytes = llread(packet);
-    if (bytes != -1) printf("Received start frame: %d bytes received \n", bytes);
-
-    // check start value
-    if (packet[0] != C_START) exit(-1);
-
-    // get file size
-    if (packet[1] != 0x0) exit(-1);
-    size_t filesize = (packet[3] << 24) | (packet[4] << 16) | (packet[5] << 8) | (packet[6]);
-
-    // get file name 
-    char filename[20];
-    int j = 0;
-    int i = 8;
-    while (j < packet[7]){
-        filename[j] = packet[i];
-        j++;
-        i++;
-    }
-
-    printf("File Size: %ld bytes\n", filesize);
-    printf("File Name: %s \n", filename);
-
-    // receive each packet one by one until end frame
-    unsigned char filedata[filesize];
-    unsigned int index_file_data = 0;
-    while (TRUE)
-    {
-        unsigned char data_received[BUF_SIZE];
-        int bytes = llread(data_received);
-
-        if (bytes != -1) {
-            // check control
-            if (data_received[0] == C_DATA) {
-                if (bytes != -1) printf("Received data packet: %d bytes received \n", bytes);
-                // get K
-                unsigned int K = data_received[2] * 256 + data_received[3];
-                int i = 4;
-                while (i < K+4){
-                    filedata[index_file_data] = data_received[i];
-                    i++;
-                    index_file_data++;
+                if (llwrite(packet, packetSize) == -1) {
+                    printf("An error occurred in the data Packet\n");
+                    exit(-1);
                 }
+
+                bytesLeftToSend -= MAX_PAYLOAD_SIZE;
+                if( bytesLeftToSend <= 0){
+                  printf("Sent Packet with %d bytes --- 0 left to be sent! \n", packetSize);
+                }
+                else{
+                printf("Sent Packet with %d bytes --- %ld left to be sent! \n", packetSize, bytesLeftToSend);
+                }
+                printf("-----------------------\n");
+                stuff += size_of_data;
+                i = (i + 1) % 255;
             }
-            // end cycle
-            if (data_received[0] == C_END) {
-                if (bytes != -1) printf("Received end frame: %d bytes received \n", bytes);
-                break;
+
+            // Send the final packet to signal the end of transmission
+            unsigned char *endPacket = C_Packet(3, filename, f_size, &C_PacketSize);
+            while (llwrite(endPacket, C_PacketSize) == -1) {
+                printf("An error occurred in the end Packet\n");
+                
             }
+
+            // Close the connection
+            llclose(1);
+            break;
         }
+
+        case receiver: {
+            // Receiver role
+
+            unsigned char *packet = (unsigned char *)malloc(MAX_PAYLOAD_SIZE);
+            int packetSize = -1;
+
+            // Wait for the start packet to initiate the reception
+            while ((packetSize = llread(packet)) < 0);
+
+            // Extract the new file size from the start packet
+            unsigned long int rcvFileSize = 0;
+            RcvFileSize_helper(packet, packetSize, &rcvFileSize);
+
+            // Open a new file for writing
+            FILE *newFile = fopen((char *)filename, "wb+");
+
+            // Receive and write data packets until the end packet is received
+            while (1) {
+
+                // Wait for the next packet
+                while ((packetSize = llread(packet)) < 0);
+
+                // Break if the end packet is received
+                if (packetSize == 0) break;
+
+                // Check if the packet is a data packet (not an end packet)
+                else if (packet[0] != 3) {
+                    unsigned char *buffer = (unsigned char *)malloc(packetSize);
+                    D_Packet_helper(packet, packetSize, buffer);
+                    fwrite(buffer, sizeof(unsigned char), packetSize - 4, newFile);
+                    free(buffer);
+                }
+
+                // Continue if the packet is an end packet
+                else continue;
+            }
+
+            // Close the new file
+            fclose(newFile);
+            break;
+        }
+        default:
+            exit(-1);
+            break;
+    }
+}
+
+// Helper function to extract file size from the received packet
+void RcvFileSize_helper(unsigned char *packet, int size, unsigned long int *f_size) {
+
+    // File Size
+    unsigned char fSizeB = packet[2];
+    unsigned char fSizeAux[fSizeB];
+    memcpy(fSizeAux, packet + 3, fSizeB);
+
+    // Reconstruct the file size
+    for (unsigned int i = 0; i < fSizeB; i++)
+        *f_size |= (fSizeAux[fSizeB - i - 1] << (8 * i));
+}
+
+// Helper function to create a control packet
+unsigned char *C_Packet(const unsigned int ctrlField, const char *filename, long int length, unsigned int *size) {
+
+    int len1 = 0;
+    unsigned int tmp = length;
+
+    // Calculate the number of bytes required to represent the file size
+    while (tmp > 1) {
+        tmp >>= 1;
+        len1++;
+    }
+    len1 = (len1 + 7) / 8; // File size in bytes
+
+    // Calculate the length of the file name
+    const int len2 = strlen(filename);
+
+    // Calculate the total size of the control packet
+    *size = 5 + len1 + len2;
+    unsigned char *packet = (unsigned char *)malloc(*size);
+
+    // Populate the control packet fields
+    unsigned int pos = 0;
+    packet[pos++] = ctrlField;
+    packet[pos++] = 0;          // T_1 (0 = file size)
+    packet[pos++] = len1;        // L_1
+
+    // Fill in the bytes representing the file size in the control packet
+    for (unsigned char i = 0; i < len1; i++) {
+        packet[2 + len1 - i] = length & 0xFF;
+        length >>= 8; // V_1
     }
 
-    // save file
-    // get received file name
-    unsigned char final_file_name[strlen(filename)+10];
-    for (int i = 0, j = 0; i < strlen(filename)+10; i++, j++) {
-        if (filename[j] == '.') {
-            unsigned char received[10] = "-received";
-            int k = 0;
-            while (k < 9){
-                final_file_name[i] = received[k];
-                k++;
-                i++;
-            }
-        }
-        final_file_name[i] = filename[j];
-    }
-    // fopen for writing
-    FILE *file;
-    file = fopen((char *) final_file_name, "wb+");
+    pos += len1;
+    packet[pos++] = 1; // T_2 (1 = file name)
+    packet[pos++] = len2; // L_2
 
-    // fwrite to write to a file
-    fwrite(filedata, sizeof(unsigned char), filesize, file);
+    // Copy the file name into the control packet
+    memcpy(packet + pos, filename, len2); // V_2
 
-    // fclose for writing
-    fclose(file);
+    return packet;
+}
+
+// Helper function to create a data packet
+unsigned char *D_Packet(unsigned char i, unsigned char *data, int size_of_data, int *packetSize) {
+
+    *packetSize = 4 + size_of_data;
+    unsigned char *packet = (unsigned char *)malloc(*packetSize);
+
+    // Populate the data packet fields
+    packet[0] = 1; // Data packet type
+    packet[1] = i; // Packet sequence number
+    packet[2] = size_of_data >> 8 & 0xFF; // High byte of size_of_data
+    packet[3] = size_of_data & 0xFF; // Low byte of size_of_data
+
+    // Copy the data into the data packet
+    memcpy(packet + 4, data, size_of_data);
+
+    return packet;
+}
+
+// Helper function to extract data from a data packet
+void D_Packet_helper(const unsigned char *packet, const unsigned int packetSize, unsigned char *buffer) {
+    // Copy data from the data packet, excluding the packet header
+    memcpy(buffer, packet + 4, packetSize - 4);
+    buffer += (packetSize - 4);
 }
