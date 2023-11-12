@@ -109,8 +109,14 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             while ((packetSize = llread(packet)) < 0);
 
             // Extract the new file size from the start packet
+            unsigned char fSizeB = packet[2];
+            unsigned char fSizeAux[fSizeB];
+            memcpy(fSizeAux, packet + 3, fSizeB);
+
+            // Reconstruct the file size
             unsigned long int rcvFileSize = 0;
-            RcvFileSize_helper(packet, packetSize, &rcvFileSize);
+            for (unsigned int i = 0; i < fSizeB; i++)
+                rcvFileSize |= (fSizeAux[fSizeB - i - 1] << (8 * i));
 
             // Open a new file for writing
             FILE *newFile = fopen((char *)filename, "wb+");
