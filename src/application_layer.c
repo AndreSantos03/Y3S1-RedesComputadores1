@@ -49,9 +49,43 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             long int f_size = ftell(file) - initial;
             fseek(file, initial, SEEK_SET);
 
-            // Create and send the start packet to signal the beginning of transmission
-            unsigned int C_PacketSize;
-            unsigned char *startPacket = C_Packet(2, filename, f_size, &C_PacketSize);
+            // Calculate the number of bytes required to represent the file size
+            int len1 = 0;
+            unsigned int tmp = f_size;
+
+            while (tmp > 1) {
+                tmp >>= 1;
+                len1++;
+            }
+            len1 = (len1 + 7) / 8; // File size in bytes
+
+            // Calculate the length of the file name
+            const int len2 = strlen(filename);
+
+            // Calculate the total size of the control packet
+            unsigned int C_PacketSize = 5 + len1 + len2;
+            unsigned char *startPacket = (unsigned char *)malloc(C_PacketSize);
+
+            // Populate the control packet fields
+            unsigned int pos = 0;
+            startPacket[pos++] = 2; // ctrlField for start packet
+            startPacket[pos++] = 0; // T_1 (0 = file size)
+            startPacket[pos++] = len1; // L_1
+
+            // Fill in the bytes representing the file size in the control packet
+            for (unsigned char i = 0; i < len1; i++) {
+                startPacket[2 + len1 - i] = f_size & 0xFF;
+                f_size >>= 8; // V_1
+            }
+
+            pos += len1;
+            startPacket[pos++] = 1; // T_2 (1 = file name)
+            startPacket[pos++] = len2; // L_2
+
+            // Copy the file name into the control packet
+            memcpy(startPacket + pos, filename, len2); // V_2
+
+            // Send the start packet to signal the beginning of transmission
             if (llwrite(startPacket, C_PacketSize) == -1) {
                 printf("An error occurred in the start Packet\n");
                 exit(-1);
@@ -76,11 +110,10 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 }
 
                 bytesLeftToSend -= MAX_PAYLOAD_SIZE;
-                if( bytesLeftToSend <= 0){
-                  printf("Sent Packet with %d bytes --- 0 left to be sent! \n", packetSize);
-                }
-                else{
-                printf("Sent Packet with %d bytes --- %ld left to be sent! \n", packetSize, bytesLeftToSend);
+                if (bytesLeftToSend <= 0) {
+                    printf("Sent Packet with %d bytes --- 0 left to be sent! \n", packetSize);
+                } else {
+                    printf("Sent Packet with %d bytes --- %ld left to be sent! \n", packetSize, bytesLeftToSend);
                 }
                 printf("-----------------------\n");
                 stuff += size_of_data;
@@ -88,10 +121,12 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             }
 
             // Send the final packet to signal the end of transmission
-            unsigned char *endPacket = C_Packet(3, filename, f_size, &C_PacketSize);
+            unsigned char *endPacket = (unsigned char *)malloc(C_PacketSize);
+            endPacket[0] = 3; // ctrlField for end packet
+            memcpy(endPacket + 1, startPacket + 1, C_PacketSize - 1); // Copy the rest of the end packet from the start packet
+
             while (llwrite(endPacket, C_PacketSize) == -1) {
                 printf("An error occurred in the end Packet\n");
-                
             }
 
             // Close the connection
@@ -152,7 +187,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     }
 }
 
-// Helper function to extract file size from the received packet
+/* // Helper function to extract file size from the received packet
 void RcvFileSize_helper(unsigned char *packet, int size, unsigned long int *f_size) {
 
     // File Size
@@ -163,9 +198,9 @@ void RcvFileSize_helper(unsigned char *packet, int size, unsigned long int *f_si
     // Reconstruct the file size
     for (unsigned int i = 0; i < fSizeB; i++)
         *f_size |= (fSizeAux[fSizeB - i - 1] << (8 * i));
-}
+} */
 
-// Helper function to create a control packet
+/* // Helper function to create a control packet
 unsigned char *C_Packet(const unsigned int ctrlField, const char *filename, long int length, unsigned int *size) {
 
     int len1 = 0;
@@ -205,7 +240,7 @@ unsigned char *C_Packet(const unsigned int ctrlField, const char *filename, long
     memcpy(packet + pos, filename, len2); // V_2
 
     return packet;
-}
+} */
 
 // Helper function to create a data packet
 unsigned char *D_Packet(unsigned char i, unsigned char *data, int size_of_data, int *packetSize) {
