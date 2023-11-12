@@ -234,13 +234,50 @@ int llwrite(const unsigned char *buf, int bufSize) {
             if (bytes < 0) return -1;
 
             // Read supervision frame and check control field
-            unsigned char controlField = readSupervisionFrame();
+            unsigned char byte, ctrlField = 0;
+            llState state = START;
+            
+            // Loop until the end of frame is received or an alarm is triggered
+            while (state != STOP_RECEIVED && alarmEnabled == FALSE) {  
+                if (read(fd, &byte, 1) > 0 || 1) {
+                    switch (state) {
+                        case START:
+                            if (byte == FLAG) state = FLAG_RECEIVED;
+                            break;
+                        case FLAG_RECEIVED:
+                            if (byte == A_RX) state = A_RECEIVED;
+                            else if (byte != FLAG) state = START;
+                            break;
+                        case A_RECEIVED:
+                            if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) || byte == C_DISC){
+                                state = C_RECEIVED;
+                                ctrlField = byte;   
+                            }
+                            else if (byte == FLAG) state = FLAG_RECEIVED;
+                            else state = START;
+                            break;
+                        case C_RECEIVED:
+                            if (byte == (A_RX ^ ctrlField)) state = BCC_CHECK;
+                            else if (byte == FLAG) state = FLAG_RECEIVED;
+                            else state = START;
+                            break;
+                        case BCC_CHECK:
+                            if (byte == FLAG){
+                                state = STOP_RECEIVED;
+                            }
+                            else state = START;
+                            break;
+                        default: 
+                            break;
+                    }
+                } 
+            } 
 
-            if (!controlField) {
+            if (!ctrlField) {
                 continue;
-            } else if (controlField == C_REJ(0) || controlField == C_REJ(1)) {
+            } else if (ctrlField == C_REJ(0) || ctrlField == C_REJ(1)) {
                 rejected = 1;
-            } else if (controlField == C_RR(0) || controlField == C_RR(1)) {
+            } else if (ctrlField == C_RR(0) || ctrlField == C_RR(1)) {
                 accepted = 1;
                 tramaTx = (tramaTx + 1) % 2;  // Nr module-2 counter (enables to distinguish frame 0 and frame 1)
             } else {
@@ -264,6 +301,7 @@ int llwrite(const unsigned char *buf, int bufSize) {
         return -1;
     }
 }
+
 
 ////////////////////////////////////////////////
 // LLREAD
@@ -425,51 +463,6 @@ int llclose(int showStatistics) {
     
     // Close the file descriptor
     return close(fd);
-}
-
-// Function to read a supervision frame from the link layer.
-// Returns the control field of the received frame.
-unsigned char readSupervisionFrame() {
-
-    unsigned char byte, ctrlField = 0;
-    llState state = START;
-    
-    // Loop until the end of frame is received or an alarm is triggered
-    while (state != STOP_RECEIVED && alarmEnabled == FALSE) {  
-        if (read(fd, &byte, 1) > 0 || 1) {
-            switch (state) {
-                case START:
-                    if (byte == FLAG) state = FLAG_RECEIVED;
-                    break;
-                case FLAG_RECEIVED:
-                    if (byte == A_RX) state = A_RECEIVED;
-                    else if (byte != FLAG) state = START;
-                    break;
-                case A_RECEIVED:
-                    if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) || byte == C_DISC){
-                        state = C_RECEIVED;
-                        ctrlField = byte;   
-                    }
-                    else if (byte == FLAG) state = FLAG_RECEIVED;
-                    else state = START;
-                    break;
-                case C_RECEIVED:
-                    if (byte == (A_RX ^ ctrlField)) state = BCC_CHECK;
-                    else if (byte == FLAG) state = FLAG_RECEIVED;
-                    else state = START;
-                    break;
-                case BCC_CHECK:
-                    if (byte == FLAG){
-                        state = STOP_RECEIVED;
-                    }
-                    else state = START;
-                    break;
-                default: 
-                    break;
-            }
-        } 
-    } 
-    return ctrlField;
 }
 
 // Function to send a supervision frame.
